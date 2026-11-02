@@ -76,6 +76,7 @@ pub const NON_RAW_EXTENSIONS: &[&str] = &[
     "tga", "ico", "dds", // Graphics & Icons
     "qoi", "ff", // Simple/Specialist formats
     "pnm", "pbm", "pgm", "ppm", "pam", // Netpbm family
+    "hif", "heif", "heic", // PV: HEIF / Sony HIF (decoded via crate::heif)
 ];
 
 pub fn is_raw_file<P: AsRef<Path>>(path: P) -> bool {

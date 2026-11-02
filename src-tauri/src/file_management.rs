@@ -1607,6 +1607,16 @@ fn generate_thumbnail_data_with_metadata(
         }
     }
 
+    // PV: fast HEIF thumbnails from ImageIO instead of a full 33 MP decode.
+    if crate::heif::is_heif_file(&source_path_str) && adjustments.is_null() && preloaded_image.is_none() {
+        let target_res = settings.medium_thumbnail_resolution.unwrap_or(1280);
+        if let Ok(mmap) = read_file_mapped(&source_path)
+            && let Ok(thumb) = crate::heif::heif_thumbnail(&mmap, target_res)
+        {
+            return Ok(thumb);
+        }
+    }
+
     if let (Some(context), Some(meta)) = (gpu_context, metadata)
         && !meta.adjustments.is_null()
     {

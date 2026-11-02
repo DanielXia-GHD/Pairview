@@ -46,6 +46,7 @@ mod focus_stacking;
 mod fog;
 mod formats;
 mod gpu_processing;
+mod heif; // PV: HEIF / Sony HIF support
 mod guided_perspective;
 mod hdr_deghosting;
 mod highlight_reconstruction;
