@@ -1,8 +1,8 @@
-# PRD — Camera Photo Library (working title)
+# PRD — Pairview
 
 | | |
 |---|---|
-| Status | Draft v0.2 — owner feedback incorporated, no feature code yet |
+| Status | Draft v0.3 — open questions resolved, no feature code yet |
 | Owner | sunnydanniel@gmail.com |
 | Date | 2026-11-01 |
 | Platforms | **macOS (Apple Silicon, M2) first** → `.dmg`; Windows 10/11 x64 (Nvidia, HEVC extension installed) → `.exe`, parity where cheap |
@@ -11,6 +11,7 @@
 | Camera | Sony **A7C II** (ILCE-7CM2, fw 2.01), shooting primarily **ARW + HIF**, sometimes ARW + JPG |
 
 ### Changelog
+- **v0.3** — Named **Pairview**. Fork connected as `origin`. Library Locations manager (§6.1.1). Camera-FTP arrivals (§6.9.1). Keep-RAW is now **AI triage first, human confirmation after**, with a hard rule that AI never drops a RAW on its own (§6.5). Slim review can be triggered manually; retention fixed at 30 days. Existing `arw/`/`hif/` subfolders stay, future shoots are flat.
 - **v0.2** — Owner's folder conventions (§5.1). Real sample-file findings (§5.4). Keep-RAW decision workflow (§6.5), now driving delete and space saver. Edited output stays HEIF. Camera-original goes to Recently Deleted. Looks library expanded (Fujifilm/Nikon/etc.). Folder-scoped lazy indexing for the NAS. Lightroom/Capture One library ideas (§6.12). Mac-first milestones with a Windows tabling rule (§10). Name ideas (§13).
 - v0.1 — Initial draft.
 
@@ -62,6 +63,10 @@ The owner shoots Sony **ARW + HIF** (sometimes ARW + JPG). Every tool treats the
 | D8 | Extras | **SD-card import, AI culling, video, search & map** | Phased after the core. |
 | D9 | Keep-RAW | **App recommends, owner decides**, per shoot and per photo (§6.5) | Drives the delete dialog and the space saver. |
 | D10 | Platform priority | **Mac first.** Expensive or hard Windows-only work is raised and tabled (§10.1). | Windows gets parity only where it's cheap. |
+| D11 | Triage order | **AI triage first, human rating after.** AI may suggest, sort, and pre-select, but **never drops a RAW or deletes a Photo without explicit human confirmation**. | AI output is stored separately from human ratings (§6.5). |
+| D12 | Retention | **30 days** for everything in Recently Deleted; slim review can also be **triggered manually** at any time | §6.5 Stage 4, §6.6 |
+| D13 | Folder layout | Existing `arw/`/`hif/` subfolders **stay as they are**; **future shoots are flat** (one folder per day) | §5.1, §6.9 |
+| D14 | Name | **Pairview** | Branding (app name, bundle id `com.danielxia.pairview`, icon) changes in M0 |
 
 ---
 
@@ -83,6 +88,8 @@ The owner shoots Sony **ARW + HIF** (sometimes ARW + JPG). Every tool treats the
 - **Camera folder name `NNNYMMDD`**: `NNN` is the folder counter (100–999; resets to 100 when the card is formatted), `Y` is the last digit of the year, `MMDD` is the month and day. One folder per day. The app parses it as a **date hint** and resolves the decade from EXIF. **EXIF `DateTimeOriginal` always wins.** The folder name is only the fallback and the "date uncertain" check.
 - **Owner prefix `YYYY-MM-DD_`**: recognized, and also treated as a hint.
 - **Format subfolders** (`arw/`, `hif/`, `jpg/`, `raw/`, any case): a folder plus its immediate format subfolders form one **shoot** (pairing scope). The grid shows Photos, never the subfolders, unless the owner expands them.
+- `A/DCIM/` is simply the path the **camera's FTP transfer** writes to on the NAS. It carries no meaning, and Pairview works with **any** folder added to the library (§6.1.1). Because the camera uploads over FTP, new shoots can **appear while Pairview is running** (§6.9.1).
+- Existing shoots with `arw/`/`hif/` subfolders are **left as they are** (D13). Future shoots are flat.
 - The manual split into subfolders and the manual rename are **no longer necessary**. Both are handled in the app (shoot view) and by the importer (§6.9). Optional **Tidy shoot** action: rename `10561031` → `2025-10-31_10561031`, and flatten or split subfolders on request. It always previews first.
 
 ### 5.2 The Photo (asset model)
@@ -131,6 +138,19 @@ Priority: **P0** = MVP, **P1** = v1.0, **P2** = later.
 - **P0** Grid of **Photos** (S/M/L) with state badge, stars, label, and Keep-RAW indicator.
 - **P0** Sort by time/name/rating/size. Filter by rating, flag, label, state, Keep-RAW, edited/unedited, camera/lens.
 - **P1** Batch **time shift** (wrong camera clock/time zone), written to XMP.
+
+#### 6.1.1 Library Locations (manage library folder paths) — P0
+*Owner's question: "Is there a feature to manage library or photo folder paths?"* Upstream RapidRAW today has a basic list of root folders, pinned folders, and the last-opened folder, but no status, settings, or relocation. Pairview adds a **Library Locations** manager (Settings → Library, plus the sidebar header):
+
+| Capability | Detail |
+|---|---|
+| Add / remove locations | Any folder on the internal SSD, an external drive, or a NAS share. Removing a location forgets its catalog/cache entries and never touches the files. |
+| Status per location | Online/offline, photo count, size (RAW vs HIF/JPG vs video), last scan time, indexing progress, space reclaimable (§6.5) |
+| **Relocate / reconnect** | When a path changes (e.g. the NAS mounts as `/Volumes/Public-1`, a drive letter changes on Windows, or a folder is moved), point the location to its new path. Ratings, edits, and cache are kept. Pairview also **suggests** the reconnect automatically when it finds the same folder structure at a new path. |
+| Auto-mount hint | If the NAS share isn't mounted, show **Connect** (opens the share's `smb://` URL via the OS) instead of an empty library |
+| Per-location settings | Index scope (whole location vs opened folders), poll interval, **exclude** sub-folders (e.g. `@eaDir`, `#recycle`, exports), Recently Deleted location, "watch for new shoots" (FTP inbox) |
+| Display name & order | e.g. "NAS — Camera" instead of `/Volumes/Public/Photos/A/DCIM`; drag to reorder in the sidebar |
+| Pinned folders | Kept from RapidRAW: pin any sub-folder for quick access |
 
 **Indexing strategy (answers Q12.5: "how expensive is indexing?")**
 
@@ -184,18 +204,25 @@ Priority: **P0** = MVP, **P1** = v1.0, **P2** = later.
 
 ### 6.5 Keep-RAW decision workflow (answers "casual vs. valuable")
 
-The owner's question was how to tell whether a photo is casual (HIF is enough) or valuable (keep the RAW). The answer is a **staged process** with a **recommendation that explains itself**. The owner makes the final call, and decisions are mostly made **per shoot**, with per-photo overrides.
+The owner's question was how to tell whether a photo is casual (HIF is enough) or valuable (keep the RAW). The answer is a **staged process: AI triage first, human rating and confirmation after** (D11). The AI does the tedious first pass the moment a shoot arrives. The owner rates and confirms at their own pace.
+
+> **Hard rule:** AI never moves a RAW (or any file) to Recently Deleted by itself. Every RAW drop and every delete requires an explicit human action on a review screen. AI output is stored **separately** from human ratings (XMP custom namespace `pairview:ai*`) and never overwrites a human rating, flag, or lock.
 
 **What the HIF already gives you.** A 10-bit HIF holds about 4× the tonal steps of a JPG, so moderate edits (exposure ±1 EV, WB tweaks, looks) work fine on HIF alone. The RAW mainly matters when highlights are blown, shadows need big lifts, ISO is high (RAW denoise is far better), WB is badly off or mixed, or it's a "portfolio" shot you may re-edit for years.
 
-**Stage 1 — Shoot intent (one click per shoot, optional).** When a shoot is first opened or imported, a small chip in the folder header: **Casual** · **Normal** · **Important**.
-- *Casual* (family day out, errands, snapshots): default recommendation is **drop RAW** unless a photo has a strong keep signal.
-- *Important* (planned landscape, event, travel highlights): default is **keep RAW** for every keeper.
-- *Normal*: use per-photo signals. This is the default.
+**Stage 1 — AI triage (automatic, on arrival or first open).** It runs in the background when a new shoot lands (FTP, import) or an un-triaged folder is opened. The results appear as dimmed, clearly labelled "AI" overlays.
+1. **Shoot intent guess:** Casual · Normal · Important, inferred from content and context (e.g. many indoor snapshots at home → Casual; golden-hour landscapes, wildlife at long focal lengths, or a dense event burst → Important). It shows as a chip in the folder header, and the owner can change it with one click.
+   - *Casual* → default recommendation **HIF is enough** unless a photo has a strong keep signal.
+   - *Important* → default **Keep RAW** for every non-reject.
+   - *Normal* → per-photo signals decide.
+2. **Burst grouping + best-of** (§6.7).
+3. **Suggested rejects:** out of focus, eyes closed, misfires (lens cap, ground shots), near-duplicates that aren't the best of their group.
+4. **AI score** (0–5 "AI ★", shown dimmed and separate from human stars) for sorting and to speed up the human pass.
+5. **Per-photo RAW value:** Keep RAW / HIF is enough / Your call, with reason chips (table below).
 
-**Stage 2 — Cull (§6.7).** Rejects are deleted as whole Photos (RAW + HIF) and never reach stage 3.
+**Stage 2 — Human pass (whenever the owner likes).** The owner goes through the shoot in AI-score order or the usual order. They rate (stars), pick or reject, accept or override the intent chip, and lock Keep-RAW (`K`) where they care. Human input always wins. Accepting AI suggestions is one key per photo or one button per group ("accept AI rejects in this burst"), but it's still a human action. Rejects confirmed here are deleted as whole Photos only via **Delete rejects** (§6.6).
 
-**Stage 3 — Per-photo RAW value (automatic, explainable).** Each remaining Photo gets **Keep RAW** / **HIF is enough** / **Your call**, with reason chips:
+**Stage 3 — RAW value signals (computed in Stage 1, refreshed after Stage 2).** Human ratings and flags from Stage 2 feed back in, so the recommendation sharpens after the human pass:
 
 | Signal (computed locally) | Pushes toward | Example chip |
 |---|---|---|
@@ -215,12 +242,16 @@ The owner's question was how to tell whether a photo is casual (HIF is enough) o
 - The owner can **lock** a decision (`K` cycles Auto → Keep 🔒 → Drop). Locked decisions are never changed by rules.
 - Signals and weights are visible and adjustable in settings. Later (P2), the app learns the weights from the owner's own overrides, just like style learning.
 
-**Stage 4 — Slim review (batch, after a grace period).** Default grace period is **30 days after capture**, so there's time to edit first.
-- A banner and a sidebar item, **Ready to slim**, list shoots past the grace period: *"2026-10-24 — 71 of 93 photos: HIF is enough · saves 2.8 GB"*.
+**Stage 4 — Slim review (human confirmation, required).** It's reached two ways:
+- **Automatically suggested** 30 days after capture, so there's time to edit first. A banner and a sidebar item, **Ready to slim**, list shoots past the grace period: *"2026-10-24 — 71 of 93 photos: HIF is enough · saves 2.8 GB"*.
+- **Manually, any time:** **Review for slimming** on any folder, selection, date range, or smart collection (context menu, toolbar, or `⌘⇧K`). This ignores the grace period.
+
+In both cases nothing happens until the owner presses **Apply** on the review screen.
 - The review screen has three columns/tabs: **HIF is enough** (pre-selected) · **Your call** · **Keep RAW**. The owner can drag between them, and each photo shows its reason chips.
-- **Apply** → RAWs (+ their recipes) go to Recently Deleted. Default retention for slimmed RAWs is 30 days, with **Empty now** when space is needed immediately.
+- Photos the owner hasn't rated or confirmed are flagged "AI-only suggestion" in the review, so it's obvious which drops rest solely on AI judgement.
+- **Apply** → RAWs (+ their recipes) go to Recently Deleted. Retention is **30 days** (D12), with **Empty now** when space is needed immediately.
 - Optional **Rebake before drop** (P1): for a Photo marked "HIF is enough" that has clipped highlights, render the RAW once with the camera look + highlight recovery and replace the HIF. The HIF-only copy then keeps the best version the RAW could give. Off by default, because it changes the look slightly.
-- Safety: never drop a RAW whose recipe is newer than its rendered HIF (re-render first). Never drop on an offline volume. Never drop without the review screen (no silent auto-slimming in v1).
+- Safety: never drop a RAW whose recipe is newer than its rendered HIF (re-render first). Never drop on an offline volume. **Never drop without the review screen and an explicit Apply. There is no silent or AI-only auto-slimming, ever (D11).**
 
 ### 6.6 Delete & orphans (linked to §6.5)
 - **P0** Delete on a `RAW+HIF` Photo opens one dialog with context-aware choices:
@@ -253,7 +284,13 @@ The owner's question was how to tell whether a photo is casual (HIF is enough) o
 - Destination default: `{Root}/{YYYY-MM-DD}_{cameraFolder}/`, the owner's current convention, created automatically. **No `arw/`/`hif/` split by default** (a setting can restore it).
 - Merges both card slots if Sort Recording is used.
 - Optional second copy to another drive, checksum-verified. The app never formats the card.
-- Optional at import: set shoot intent (§6.5), apply a look, run culling.
+- Optional at import: set shoot intent (§6.5), apply a look. AI triage runs automatically afterwards.
+
+#### 6.9.1 Camera FTP arrivals — P1 (detection P0)
+The A7C II uploads to the NAS over FTP (into `…/A/DCIM/`), so shoots arrive without an import step.
+- **P0** New files in a watched location are detected by the SMB poller (default 60 s, plus FSEvents when they work). Pairs are formed as soon as both files exist. A half-uploaded file (size still changing) is skipped until it's stable.
+- **P1** **New arrivals** sidebar item and a "New" badge on the shoot. AI triage (§6.5 Stage 1) starts automatically. An optional macOS notification: *"2026-11-02: 84 new photos — triage done, 9 suggested rejects"*.
+- Future FTP shoots are flat (D13). If the camera's FTP setup creates its own folder names, they're parsed like card folders (§5.1). An optional **Tidy shoot** adds the `YYYY-MM-DD_` prefix.
 
 ### 6.10 Video (P1)
 - Sony MP4/XAVC clips in grid and date views, viewer playback (AVFoundation on Mac), and in slideshows.
@@ -317,8 +354,8 @@ Tauri 2 shell (fork of RapidRAW — React + TS + zustand / Rust + wgpu + ONNX Ru
 ```
 
 ### 8.1 Staying mergeable with upstream RapidRAW
-- The repo is built **on top of upstream RapidRAW history** (re-based 2026-11-01; `upstream` remote = `CyberTimon/RapidRAW`). Your GitHub fork becomes `origin`.
-- New code goes in **new files/modules**. Upstream files only get small, well-marked hook points (`// CPL:` comments) such as registering new Tauri commands, adding HEIF to `formats.rs`, and routing the main view.
+- The repo is built **on top of upstream RapidRAW history** (re-based 2026-11-01). `upstream` = `CyberTimon/RapidRAW`. `origin` = the owner's fork [`DanielXia-GHD/PhotoVeiwerLibrary`](https://github.com/DanielXia-GHD/PhotoVeiwerLibrary), whose `main` was identical to upstream `main` (`d1a9e2a5`) when connected.
+- New code goes in **new files/modules**. Upstream files only get small, well-marked hook points (`// PV:` comments) such as registering new Tauri commands, adding HEIF to `formats.rs`, and routing the main view.
 - Merge `upstream/main` **every 2–4 weeks** or when a camera/feature fix lands. CI builds after each merge.
 - `README.md` is ours and is marked `merge=ours` in `.gitattributes`, so upstream README edits never conflict. Upstream credit and build instructions are kept inside it.
 - Branding (app name, bundle id `io.github.CyberTimon.RapidRAW` → our own id, icons) is changed in config only, so it can live alongside an installed official RapidRAW.
@@ -346,10 +383,10 @@ Tauri 2 shell (fork of RapidRAW — React + TS + zustand / Rust + wgpu + ONNX Ru
 | Milestone | Scope | Exit criteria |
 |---|---|---|
 | **M0 — Mac spikes** | Fork builds and runs on M2 (`npm start`). **HIF decode in RapidRAW's loader via ImageIO**. **10-bit HEIF encode** via ImageIO (verify 10-bit, EXIF copy). Embedded-preview extraction speed for ARW + HIF on the NAS. Pairing over `arw/`+`hif/`. XAVC HS playback check. Unsigned `.dmg` from CI. | The owner's 2026-10-24 shoot opens, pairs, and thumbnails in < 5 s from the NAS; a HIF round-trips decode → edit → 10-bit HEIF write |
-| **M1 — Library + Viewer** | Roots, L0–L2 indexing, folder tree + shoots, date view, Photo grid + badges, viewer, full screen, ←/→, zoom, slideshow, ratings → XMP, albums Photo-aware | The owner replaces Pixea for daily browsing |
-| **M2 — Lifecycle + Keep-RAW** | Delete dialog + defaults, Recently Deleted, orphans, op-log/undo, shoot intent, RAW-value signals, Ready-to-slim + review, offline handling | RAW and HIF are never out of sync again; a shoot is slimmed in < 2 min |
+| **M1 — Library + Viewer** | **Library Locations** manager (add/relocate/exclude/status), new-file detection, L0–L2 indexing, folder tree + shoots, date view, Photo grid + badges, viewer, full screen, ←/→, zoom, slideshow, ratings → XMP, albums Photo-aware | The owner replaces Pixea for daily browsing |
+| **M2 — Lifecycle + Keep-RAW** | Delete dialog + defaults, Recently Deleted, orphans, op-log/undo, shoot intent chip, heuristic RAW-value signals (clipping, ISO, WB, rating), Ready-to-slim + **manual Review for slimming**, offline handling | RAW and HIF are never out of sync again; a shoot is slimmed in < 2 min |
 | **M3 — Edit loop + Looks** | `E` on RAW, overwrite HIF/JPG + original to Recently Deleted, base rule for no-RAW, revert, generic Auto, **"My Sony" look fitting**, looks library v1, **edit-history capture** | Edit a shot end-to-end in < 30 s; default renders match the camera HIF closely |
-| **M4 — Import + Cull** | SD import (naming convention), culling (bursts, sharpness, eyes, best-of), compare/survey, focus mask | Card → culled, intent-tagged shoot in one sitting |
+| **M4 — AI triage + Import** | Full **AI triage** on arrival (intent guess, bursts, suggested rejects, AI ★, RAW value), human-pass UI (accept or override), FTP New arrivals, SD import, compare/survey, focus mask | An FTP-uploaded shoot is triaged before the owner opens it; the human pass takes minutes, not an hour |
 | **M5 — Find + Collections** | Smart collections, quick collection, filter bar, metadata + semantic search, map, video, pair-safe batch rename | |
 | **M6 — Style** | Style training, Auto = my style, named styles, "Why?", batch auto, rebake-before-drop, learned Keep-RAW weights | Auto edits accepted unchanged ≥ 50% |
 | **W — Windows** | `.exe` build + parity pass after M3, then per milestone; tabled items stay tabled | Core library/viewer/lifecycle/edit loop work on Windows |
@@ -371,7 +408,7 @@ Any feature where the Windows path is meaningfully harder or more expensive than
 
 | Risk | L | I | Mitigation |
 |---|---|---|---|
-| Upstream RapidRAW moves fast → merge conflicts | High | Med | New modules, `// CPL:` hook points, merges every 2–4 weeks, CI after merge |
+| Upstream RapidRAW moves fast → merge conflicts | High | Med | New modules, `// PV:` hook points, merges every 2–4 weeks, CI after merge |
 | ImageIO 10-bit HEIF encode drops to 8-bit or loses metadata | Med | Med | M0 spike; fall back to libheif + x265 on Mac (GPL is fine for personal use) |
 | SMB latency makes large folders feel slow | Med | Med | Lazy L2, local cache, prefetch, never read full files while browsing |
 | Keep-RAW recommendation drops a RAW the owner later wants | Med | High | Review screen required; 30-day Recently Deleted; locks; conservative defaults; Important-shoot override |
@@ -383,32 +420,25 @@ Any feature where the Windows path is meaningfully harder or more expensive than
 
 ## 12. Open questions
 
-Answered in v0.2: 12.1 HEIF output ✔, 12.2 base for no-RAW ✔, 12.3 original to Recently Deleted ✔, 12.4 A7C II ✔, 12.5 indexing ✔ (§6.1), 12.6 LR/C1 ideas ✔ (§6.12), 12.7 delete prompt + toggle + setting ✔, 12.8 no phone photos ✔.
+**Resolved**
+- v0.2: HEIF output, hidden base for no-RAW Photos, camera original to Recently Deleted, A7C II, indexing cost, LR/C1 ideas, delete prompt + toggle + setting, no phone photos.
+- v0.3:
+  - Fork URL → `origin` (§8.1).
+  - `A/` means nothing (camera FTP path), and any folder can be added (§6.1.1 Library Locations).
+  - Retention is 30 days, plus manual slim review (D12).
+  - AI triage first, human confirmation after, and AI never drops a RAW (D11, §6.5).
+  - Existing subfolders stay, future shoots are flat (D13).
+  - More samples later.
+  - Name: **Pairview** (D14).
 
-**New / remaining:**
-1. **GitHub fork URL.** The fork files in this folder were a plain copy (no git history, hidden files missing), so the local repo was re-based onto upstream RapidRAW history. Share your fork URL and it'll be set as `origin`.
-2. **What is `A` in `/Photos/A/DCIM`?** A camera, a person, or a card? Will there be `B`, or a second camera, later? (Affects pairing guards and import destination.)
-3. **Slim grace period:** 30 days after capture OK? And retention for slimmed RAWs: 30 days, or shorter (e.g. 7) since the goal is saving space?
-4. **Shoot intent:** is a per-shoot Casual / Normal / Important chip something you'd actually click, or should it stay fully automatic?
-5. **Existing `arw/`/`hif/` subfolders:** leave as is (the app handles them), or offer a one-time "flatten all" for consistency?
-6. **More samples, when convenient:** an HLG HIF, an ARW+JPG pair, a high-ISO indoor shot, a burst, a backlit/clipped shot, an XAVC HS clip, and a few frames in different Creative Looks (for look fitting).
-7. **Name** — pick one from §13 or suggest your own.
+**Remaining (none block M0)**
+1. **More samples (later):** an HLG HIF, an ARW+JPG pair, a high-ISO indoor shot, a burst, a backlit/clipped shot, an XAVC HS clip, and a few frames in different Creative Looks.
+2. **GitHub repo name (optional):** the fork is `PhotoVeiwerLibrary` ("Veiwer" is misspelled). Renaming it to `pairview` on GitHub is harmless, because GitHub redirects the old URL.
+3. **FTP folder naming:** when the camera uploads over FTP, does it create `NNNYMMDD` folders, or put everything in one folder? (Tells the poller how to group new arrivals into shoots. Worst case, files are grouped by capture date.)
 
-## 13. Name ideas
+## 13. Name
 
-| Name | Why |
-|---|---|
-| **Pairview** | Says the core idea: the RAW and the HIF, viewed as one |
-| **Keeper** | Culling + "keep the RAW?" are the heart of the workflow |
-| **Negative & Print** (short: **Negprint**) | Classic darkroom metaphor: the RAW is the negative, the HIF is the print |
-| **Contact Sheet** | The photographer's classic way to review a roll |
-| **Duet** | Two files, one photo |
-| **Lumen Library** | Neutral, descriptive |
-| **Shoebox** | The friendly place your photos live; slightly playful |
-
-*Recommendation: **Pairview** (descriptive, unlikely to clash) or **Keeper** (memorable).*
-
----
+**Pairview** (chosen in v0.3): the RAW and the HIF, viewed as one. Bundle id `com.danielxia.pairview`. App name, window title, and icon change in M0. Branding lives in config only (`tauri.conf.json`, `package.json`), so it doesn't collide with an installed official RapidRAW. Other candidates that were considered: Keeper, Negprint, Contact Sheet, Duet, Lumen Library, Shoebox.
 
 ## 14. Research notes
 *(from v0.1, still valid)*

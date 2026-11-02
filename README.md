@@ -1,16 +1,16 @@
-# Camera Photo Library (working title)
+# Pairview
 
 A photo library, viewer and AI-assisted editor for **macOS (Apple Silicon) first, then Windows**. It treats a RAW + HIF/JPG pair as **one photo**: view, rate, cull, edit (from the RAW, automatically), decide whether the RAW is worth keeping, and delete, all without the two files drifting apart.
 
 Built as a personal-use fork of [**RapidRAW**](https://github.com/CyberTimon/RapidRAW) by Timon Käch, a GPU-accelerated, non-destructive RAW editor. All of RapidRAW's editing features are inherited and upstream changes are merged regularly.
 
-> **Status:** planning complete for v0.2 of the PRD; feature work starts with milestone M0 (Mac spikes).
+> **Status:** PRD v0.3 complete; feature work starts with milestone M0 (Mac spikes).
 
 ## What this fork adds (planned)
 
 - **Photo = RAW + display copy.** `DSC03545.ARW` + `DSC03545.HIF` (even across `arw/` and `hif/` subfolders) is one tile, one rating, one delete.
 - **First-class Sony HIF** (10-bit HEIF) decode and edited-output encode.
-- **Keep-RAW workflow.** Explainable "Keep RAW / HIF is enough" suggestions, shoot intent, and a batch "Ready to slim" review that reclaims space safely.
+- **Keep-RAW workflow.** AI triage first, then your confirmation. Explainable "Keep RAW / HIF is enough" suggestions, shoot intent, and a batch "Ready to slim" review that reclaims space safely.
 - **Recently Deleted** on the same drive/NAS share, orphan-RAW detection, and undo.
 - **Edit from RAW, overwrite the HIF/JPG.** "My Sony" camera look fitted from your own files, plus classic camera looks.
 - **Pixea-style viewer:** same-window full screen, ←/→, slideshow. Date browsing next to the folder tree. NAS-friendly lazy indexing.
@@ -47,9 +47,9 @@ This repository sits on top of upstream RapidRAW's git history, so upstream fixe
 | Remote | Points to |
 |---|---|
 | `upstream` | `https://github.com/CyberTimon/RapidRAW.git` |
-| `origin` | your GitHub fork |
+| `origin` | `https://github.com/DanielXia-GHD/PhotoVeiwerLibrary.git` (this fork) |
 
-Fork-specific code lives in its own modules. Upstream files only get small hook points marked with `// CPL:` comments, to keep merges painless. To sync:
+Fork-specific code lives in its own modules. Upstream files only get small hook points marked with `// PV:` comments, to keep merges painless. To sync:
 
 ```bash
 git fetch upstream && git merge upstream/main

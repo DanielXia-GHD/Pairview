@@ -1,2 +1,2 @@
-# Keep our README on upstream merges (requires: git config merge.ours.driver true)
+# Keep Pairview README on upstream merges (requires: git config merge.ours.driver true)
 README.md merge=ours
