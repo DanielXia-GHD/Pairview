@@ -43,3 +43,7 @@ src-tauri/libs/
 
 # bench/replay.js result dumps
 bench/out/
+
+# Camera Photo Library additions
+Thumbs.db
+.env
