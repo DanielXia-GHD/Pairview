@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft v0.3 — open questions resolved, no feature code yet |
+| Status | Draft v0.3.1 — open questions resolved, no feature code yet |
 | Owner | sunnydanniel@gmail.com |
 | Date | 2026-11-01 |
 | Platforms | **macOS (Apple Silicon, M2) first** → `.dmg`; Windows 10/11 x64 (Nvidia, HEVC extension installed) → `.exe`, parity where cheap |
@@ -11,6 +11,7 @@
 | Camera | Sony **A7C II** (ILCE-7CM2, fw 2.01), shooting primarily **ARW + HIF**, sometimes ARW + JPG |
 
 ### Changelog
+- **v0.3.1** — Repo renamed to `DanielXia-GHD/Pairview`. FTP folder naming confirmed (same `NNNYMMDD` as the card). Opt-in **auto-tidy** of new FTP shoots. Fixed the wrong year in the `10561031` example (it is 2026-10-31).
 - **v0.3** — Named **Pairview**. Fork connected as `origin`. Library Locations manager (§6.1.1). Camera-FTP arrivals (§6.9.1). Keep-RAW is now **AI triage first, human confirmation after**, with a hard rule that AI never drops a RAW on its own (§6.5). Slim review can be triggered manually; retention fixed at 30 days. Existing `arw/`/`hif/` subfolders stay, future shoots are flat.
 - **v0.2** — Owner's folder conventions (§5.1). Real sample-file findings (§5.4). Keep-RAW decision workflow (§6.5), now driving delete and space saver. Edited output stays HEIF. Camera-original goes to Recently Deleted. Looks library expanded (Fujifilm/Nikon/etc.). Folder-scoped lazy indexing for the NAS. Lightroom/Capture One library ideas (§6.12). Mac-first milestones with a Windows tabling rule (§10). Name ideas (§13).
 - v0.1 — Initial draft.
@@ -90,7 +91,7 @@ The owner shoots Sony **ARW + HIF** (sometimes ARW + JPG). Every tool treats the
 - **Format subfolders** (`arw/`, `hif/`, `jpg/`, `raw/`, any case): a folder plus its immediate format subfolders form one **shoot** (pairing scope). The grid shows Photos, never the subfolders, unless the owner expands them.
 - `A/DCIM/` is simply the path the **camera's FTP transfer** writes to on the NAS. It carries no meaning, and Pairview works with **any** folder added to the library (§6.1.1). Because the camera uploads over FTP, new shoots can **appear while Pairview is running** (§6.9.1).
 - Existing shoots with `arw/`/`hif/` subfolders are **left as they are** (D13). Future shoots are flat.
-- The manual split into subfolders and the manual rename are **no longer necessary**. Both are handled in the app (shoot view) and by the importer (§6.9). Optional **Tidy shoot** action: rename `10561031` → `2025-10-31_10561031`, and flatten or split subfolders on request. It always previews first.
+- The manual split into subfolders and the manual rename are **no longer necessary**. Both are handled in the app (shoot view) and by the importer (§6.9). Optional **Tidy shoot** action: rename `10561031` → `2026-10-31_10561031`, and flatten or split subfolders on request. It always previews first.
 
 ### 5.2 The Photo (asset model)
 
@@ -290,7 +291,9 @@ In both cases nothing happens until the owner presses **Apply** on the review sc
 The A7C II uploads to the NAS over FTP (into `…/A/DCIM/`), so shoots arrive without an import step.
 - **P0** New files in a watched location are detected by the SMB poller (default 60 s, plus FSEvents when they work). Pairs are formed as soon as both files exist. A half-uploaded file (size still changing) is skipped until it's stable.
 - **P1** **New arrivals** sidebar item and a "New" badge on the shoot. AI triage (§6.5 Stage 1) starts automatically. An optional macOS notification: *"2026-11-02: 84 new photos — triage done, 9 suggested rejects"*.
-- Future FTP shoots are flat (D13). If the camera's FTP setup creates its own folder names, they're parsed like card folders (§5.1). An optional **Tidy shoot** adds the `YYYY-MM-DD_` prefix.
+- **Confirmed:** FTP creates the same one-folder-per-day `NNNYMMDD` names as the card (e.g. `10561031` = counter 105, 2026-10-31), and future shoots are flat (D13). A new `NNNYMMDD` folder in a watched location = a new shoot.
+- Folder names can repeat: the counter resets to 100 on every card format, and `Y` repeats every decade. So a folder name is never treated as an ID. Shoots are identified by path + capture-date range, and dates always come from EXIF.
+- **P1 Auto-tidy (opt-in, replaces the owner's manual rename):** once a new FTP shoot has been **quiet for 30 minutes** (no new or growing files), rename `10561031` → `2026-10-31_10561031`, with the date taken from the photos' EXIF (the earliest `DateTimeOriginal`). It waits for quiet, because renaming a folder mid-upload would make the camera recreate `10561031` and split the shoot in two. If a late file still arrives in a re-created `10561031`, it's merged into the tidied folder on the next quiet period. Every auto-tidy is logged and can be undone. A manual **Tidy shoot** is still available for older folders.
 
 ### 6.10 Video (P1)
 - Sony MP4/XAVC clips in grid and date views, viewer playback (AVFoundation on Mac), and in slideshows.
@@ -354,7 +357,7 @@ Tauri 2 shell (fork of RapidRAW — React + TS + zustand / Rust + wgpu + ONNX Ru
 ```
 
 ### 8.1 Staying mergeable with upstream RapidRAW
-- The repo is built **on top of upstream RapidRAW history** (re-based 2026-11-01). `upstream` = `CyberTimon/RapidRAW`. `origin` = the owner's fork [`DanielXia-GHD/PhotoVeiwerLibrary`](https://github.com/DanielXia-GHD/PhotoVeiwerLibrary), whose `main` was identical to upstream `main` (`d1a9e2a5`) when connected.
+- The repo is built **on top of upstream RapidRAW history** (re-based 2026-11-01). `upstream` = `CyberTimon/RapidRAW`. `origin` = the owner's fork [`DanielXia-GHD/Pairview`](https://github.com/DanielXia-GHD/Pairview) (renamed from `PhotoVeiwerLibrary`), whose `main` was identical to upstream `main` (`d1a9e2a5`) when connected.
 - New code goes in **new files/modules**. Upstream files only get small, well-marked hook points (`// PV:` comments) such as registering new Tauri commands, adding HEIF to `formats.rs`, and routing the main view.
 - Merge `upstream/main` **every 2–4 weeks** or when a camera/feature fix lands. CI builds after each merge.
 - `README.md` is ours and is marked `merge=ours` in `.gitattributes`, so upstream README edits never conflict. Upstream credit and build instructions are kept inside it.
@@ -430,11 +433,10 @@ Any feature where the Windows path is meaningfully harder or more expensive than
   - Existing subfolders stay, future shoots are flat (D13).
   - More samples later.
   - Name: **Pairview** (D14).
+- v0.3.1: repo renamed to `Pairview`; FTP folders use `NNNYMMDD`, one per day (§6.9.1).
 
-**Remaining (none block M0)**
-1. **More samples (later):** an HLG HIF, an ARW+JPG pair, a high-ISO indoor shot, a burst, a backlit/clipped shot, an XAVC HS clip, and a few frames in different Creative Looks.
-2. **GitHub repo name (optional):** the fork is `PhotoVeiwerLibrary` ("Veiwer" is misspelled). Renaming it to `pairview` on GitHub is harmless, because GitHub redirects the old URL.
-3. **FTP folder naming:** when the camera uploads over FTP, does it create `NNNYMMDD` folders, or put everything in one folder? (Tells the poller how to group new arrivals into shoots. Worst case, files are grouped by capture date.)
+**Remaining (doesn't block M0)**
+- **More samples (later):** an HLG HIF, an ARW+JPG pair, a high-ISO indoor shot, a burst, a backlit/clipped shot, an XAVC HS clip, and a few frames in different Creative Looks.
 
 ## 13. Name
 

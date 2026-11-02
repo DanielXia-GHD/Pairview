@@ -47,7 +47,7 @@ This repository sits on top of upstream RapidRAW's git history, so upstream fixe
 | Remote | Points to |
 |---|---|
 | `upstream` | `https://github.com/CyberTimon/RapidRAW.git` |
-| `origin` | `https://github.com/DanielXia-GHD/PhotoVeiwerLibrary.git` (this fork) |
+| `origin` | `https://github.com/DanielXia-GHD/Pairview.git` (this fork) |
 
 Fork-specific code lives in its own modules. Upstream files only get small hook points marked with `// PV:` comments, to keep merges painless. To sync:
 
