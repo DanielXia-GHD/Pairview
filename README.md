@@ -16,7 +16,7 @@ Built as a personal-use fork of [**RapidRAW**](https://github.com/CyberTimon/Rap
 - **Pixea-style viewer:** same-window full screen, ←/→, slideshow. Date browsing next to the folder tree. NAS-friendly lazy indexing.
 - One-click AI edit that **learns your style**, AI culling, SD-card import, search and map.
 
-Full requirements: [**docs/PRD.md**](docs/PRD.md)
+Full requirements: [**docs/PRD.md**](docs/PRD.md) · Build order: [**docs/IMPLEMENTATION_PLAN.md**](docs/IMPLEMENTATION_PLAN.md) · Spike results: [docs/M0-findings.md](docs/M0-findings.md)
 
 ## Build from source
 
