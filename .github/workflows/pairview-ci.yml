@@ -1,0 +1,22 @@
+# Pairview: Mac-only build (Apple Silicon .dmg), run on demand or for a pushed tag.
+# Reuses upstream's build.yml. Upstream's own ci/lint/pr-ci/release workflows are meant to be
+# disabled in this fork's Actions settings (docs/IMPLEMENTATION_PLAN.md, M0-04).
+name: Pairview macOS build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'pv-v*'
+
+jobs:
+  build-macos:
+    uses: ./.github/workflows/build.yml
+    with:
+      platform: 'macos-14'
+      target: aarch64-apple-darwin
+      build-args: '--bundles dmg'
+      asset-prefix: 'pairview'
+    secrets: inherit
+    permissions:
+      contents: write

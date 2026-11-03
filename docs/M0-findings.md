@@ -20,7 +20,13 @@ Spike tool: [`spikes/m0/imageio_spike.swift`](../spikes/m0/imageio_spike.swift) 
 | 9 | XAVC HS 4:2:2 video playback | No sample clip yet | ⏸ Needs a sample |
 | 10 | CI | Upstream `ci.yml` builds ~10 platform variants (incl. Linux and Android) on every push. A slim `pairview-ci.yml` (macOS arm64 `.dmg` + Windows `.exe`) needs a decision on enabling Actions on the fork | ⏸ Owner decision |
 
-**Not yet verified in the running app UI:** HIF files open in the grid and editor. The code paths are compiled and unit-tested, but nobody has clicked through `npm start` yet.
+**Running-app check (2026-11-02, M0-02):** `npm start` with the owner browsing a local copy (`~/Desktop/2026-10-23_10261023`). The log shows HIF files decoding through ImageIO, portrait 4672×7008, in **0.47–0.50 s**. ARWs open in the editor. Two log errors: the update check finds no Pairview release yet (expected; to be silenced), and one upstream `Preview worker error: No original image loaded` while switching images quickly (watch). The grid still shows ARW and HIF as separate tiles until M1 (Photo grid).
+
+**More findings (2026-11-02):**
+- **`kamadak-exif` cannot read EXIF from Sony HIF files** (it reads Apple-written HEIF fine). RapidRAW's EXIF panel and date sorting will be empty for HIFs → M1-05 must read HIF metadata through ImageIO (`heif.rs` already has the property plumbing).
+- **10-bit HEIF encode in Rust** (`pv::heif::encode_heif`): round-trip test passes on 4 samples (size, orientation, depth 10, `DateTimeOriginal`, model). Orientation is reset to 1 because decoded pixels are already upright.
+- **Disk:** macOS reports 130 GB available for apps (31 GB plain free + purgeable). No manual purge needed.
+- **TypeScript baseline:** upstream already has 65 `tsc` errors; the gate is "no new errors in touched files".
 
 ## Code changes (all marked `// PV:`)
 

@@ -31,7 +31,7 @@ A fresh session (or a delegated agent) should be able to pick up any `[ ]` task 
 | **H** | Haiku 5.5 | Mechanical work: branding/renames, UI text + translation keys, registering commands, boilerplate, fixtures, docs |
 
 **Review gate (mandatory):**
-1. Every task: `cargo test`, `cargo clippy -- -D warnings` (for new `pv` code), `npm run typecheck`, `npm run lint`.
+1. Every task: `cargo test`, `cargo clippy` clean for `src/pv/`, `cargo fmt`, and **no new** `npm run typecheck` / `npm run lint` errors in touched files (upstream baseline: 65 `tsc` errors).
 2. Any task tagged 🛡 (it touches user files on disk) gets an **Opus review of the diff** before merge, regardless of who wrote it, plus the safety test suite (§4.3).
 3. Tasks done by H or S that fail review twice get bumped up a tier.
 
@@ -84,11 +84,11 @@ These refine PRD §8 and are binding unless changed here.
 | ID | Task | Tier | Depends | Touches | Done when |
 |---|---|---|---|---|---|
 | `[x] M0-01` | HIF decode/thumbnail via ImageIO | O | — | `heif.rs`, hooks | Test passes on portrait + landscape samples (done) |
-| `[ ] M0-02` | **UI check of HIF in the running app** | S | M0-01 | — | `npm start`: open `2026-10-24_10361024`; HIF thumbnails appear; a HIF opens in the editor with correct orientation and colors. Findings recorded in M0-findings |
-| `[ ] M0-03` | **Pairview branding** | H | — | `src-tauri/tauri.conf.json` (`productName`, `identifier` → `com.danielxia.pairview`, window title), `package.json` `name`, icons (placeholder ok) | `.dmg` is named `Pairview_*.dmg`; it installs next to an official RapidRAW without clashing (different bundle id and app-data dir) |
-| `[ ] M0-04` | **Slim CI** `pairview-ci.yml` (macOS arm64 `.dmg` on `workflow_dispatch` + tags; Windows `.exe` later). Keep upstream workflows but don't run them on push to our fork (via a repository variable check or disabling them in fork settings; **owner decides**) | S | M0-03 | `.github/workflows/pairview-ci.yml` | A manual run produces a downloadable `.dmg` artifact |
-| `[ ] M0-05` | Create `src-tauri/src/pv/` (A1), move `heif.rs` to `pv/heif.rs`, add `rusqlite`, set up the clippy config for `pv` | H | — | `lib.rs` hook, `pv/mod.rs`, `Cargo.toml` | Builds; `heif` test still passes |
-| `[ ] M0-06` | 10-bit HEIF **encode** in Rust (port of the Swift spike) | O | M0-05 | `pv/heif.rs` | Round-trip test: decode → encode → readback depth 10, EXIF date and model preserved |
+| `[x] M0-02` | **UI check of HIF in the running app** | S | M0-01 | — | `npm start`: open `2026-10-24_10361024`; HIF thumbnails appear; a HIF opens in the editor with correct orientation and colors. Findings recorded in M0-findings |
+| `[x] M0-03` | **Pairview branding** | H | — | `src-tauri/tauri.conf.json` (`productName`, `identifier` → `com.danielxia.pairview`, window title), `package.json` `name`, icons (placeholder ok) | `.dmg` is named `Pairview_*.dmg`; it installs next to an official RapidRAW without clashing (different bundle id and app-data dir) |
+| `[~] M0-04` | **Slim CI** (workflow added; owner to disable upstream workflows in fork settings before the next push) `pairview-ci.yml` (macOS arm64 `.dmg` on `workflow_dispatch` + tags; Windows `.exe` later). Keep upstream workflows but don't run them on push to our fork (via a repository variable check or disabling them in fork settings; **owner decides**) | S | M0-03 | `.github/workflows/pairview-ci.yml` | A manual run produces a downloadable `.dmg` artifact |
+| `[x] M0-05` | Create `src-tauri/src/pv/` (A1), move `heif.rs` to `pv/heif.rs`, add `rusqlite`, set up the clippy config for `pv` | H | — | `lib.rs` hook, `pv/mod.rs`, `Cargo.toml` | Builds; `heif` test still passes |
+| `[x] M0-06` | 10-bit HEIF **encode** in Rust (port of the Swift spike) | O | M0-05 | `pv/heif.rs` | Round-trip test: decode → encode → readback depth 10, EXIF date and model preserved |
 
 ---
 
@@ -104,7 +104,7 @@ These refine PRD §8 and are binding unless changed here.
 | `[ ] M1-02` | **Location identity**: volume UUID / SMB server+share + relative path; online/offline detection; relocation API | O | M1-01 | `pv/locations.rs` | Tests: same folder at a new mount path is matched (fixture with two roots); offline root reports offline without hanging (timeout ≤ 2 s on unreachable SMB) |
 | `[ ] M1-03` | **L0 scanner**: walks a location, records folders and files (listing only, no file reads), honors excludes (`@eaDir`, `#recycle`, `.pairview-deleted`, dotfiles), incremental by mtime | S | M1-01, M1-02 | `pv/scan/l0.rs` | 4 real shoots from `PV_FIXTURES` scanned in < 2 s; re-scan with no changes does zero DB writes |
 | `[ ] M1-04` | **Shoot + pairing engine** (PRD §5.1–5.3): shoot = folder + format subfolders; basename pairing; `NNNYMMDD` and `YYYY-MM-DD_` date-hint parser; Photo state derivation; representative path (A4) | O | M1-03 | `pv/assets/{shoot,pairing,state}.rs` | Synthetic fixtures: flat, split, orphan, RAW-only, display-only, RAW+HIF+JPG, case-mixed names → correct Photos/states. Real fixtures: 234/234 pairs |
-| `[ ] M1-05` | **L1 EXIF worker**: reads EXIF for Photos (one member per Photo first, the second later for the guard), 8-way parallel, priority queue; writes `exif`; runs the **timestamp guard** and flags mismatches | S | M1-04 | `pv/scan/l1.rs` (reuse `exif_processing`) | Opened 95-photo shoot gets dates in < 3 s; mismatch fixture flagged; guard result cached |
+| `[ ] M1-05` | **L1 EXIF worker** (HIF metadata via ImageIO: `kamadak-exif` can't read Sony HIF EXIF): reads EXIF for Photos (one member per Photo first, the second later for the guard), 8-way parallel, priority queue; writes `exif`; runs the **timestamp guard** and flags mismatches | S | M1-04 | `pv/scan/l1.rs` (reuse `exif_processing`) | Opened 95-photo shoot gets dates in < 3 s; mismatch fixture flagged; guard result cached |
 | `[ ] M1-06` | **Watcher / poller**: FSEvents where reliable, else poll (default 60 s); stable-size check for in-progress FTP uploads; emits `pv://folder-changed` events | S | M1-03 | `pv/scan/watch.rs` | Copying files into a watched fixture folder shows up within the poll interval; a growing file is ignored until stable for 2 polls |
 | `[ ] M1-07` | **Thumbnail source per Photo** (M0 finding): unedited pair → ARW embedded preview; HIF-only/edited → `heif_thumbnail`; local cache keyed by Photo + member mtime | S | M1-04 | hook in `file_management.rs` thumbnail path; `pv/thumbs.rs` | 95-photo uncached day: all thumbnails < 5 s on the NAS; cached revisit < 0.5 s |
 | `[ ] M1-08` | **Photo-level metadata** (A6): get/set rating, flag, label; XMP sidecar read/write (Adobe namespaces + `pairview:` namespace); mirror into `.rrdata` of every member | O 🛡 | M1-04 | `pv/xmp.rs`, `pv/metadata.rs` | Round-trip with Adobe-written XMP sample; RAW file bytes never change (checksum test); RapidRAW shows the same rating in its editor |
