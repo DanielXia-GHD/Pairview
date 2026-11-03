@@ -44,6 +44,7 @@ import SettingsPanel from './SettingsPanel';
 
 import LibraryGrid from './library/LibraryGrid';
 import { JobsMenu, SearchInput, ViewOptionsDropdown } from './library/LibraryHeader';
+import { PV_LATEST_RELEASE_API, PV_LATEST_RELEASE_URL } from '../../pv/branding'; // PV
 
 export interface ColumnWidths {
   thumbnail: number;
@@ -315,7 +316,7 @@ export default function MainLibrary(props: MainLibraryProps) {
         const currentVersion = await getVersion();
         setAppVersion(currentVersion);
 
-        const response = await fetch('https://api.github.com/repos/CyberTimon/RapidRAW/releases/latest');
+        const response = await fetch(PV_LATEST_RELEASE_API); // PV: check Pairview releases, not upstream
         if (!response.ok) {
           console.error('Failed to fetch latest release info from GitHub.');
           return;
@@ -474,7 +475,7 @@ export default function MainLibrary(props: MainLibraryProps) {
                             }`}
                             onClick={() => {
                               if (isUpdateAvailable) {
-                                open('https://github.com/CyberTimon/RapidRAW/releases/latest');
+                                open(PV_LATEST_RELEASE_URL); // PV
                               }
                             }}
                             data-tooltip={

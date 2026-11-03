@@ -17,6 +17,7 @@ import uk from './locales/uk.json';
 import ca from './locales/ca.json';
 import nl from './locales/nl.json';
 import cs from './locales/cs.json';
+import pvEn from '../pv/i18n/en.json'; // PV: Pairview strings and branding overrides
 
 i18n.use(initReactI18next).init({
   resources: {
@@ -44,3 +45,6 @@ i18n.use(initReactI18next).init({
     escapeValue: false,
   },
 });
+
+// PV: layer Pairview strings over upstream English (deep merge, overwrite).
+i18n.addResourceBundle('en', 'translation', pvEn, true, true);

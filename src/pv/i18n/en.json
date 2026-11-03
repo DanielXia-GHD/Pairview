@@ -1,0 +1,20 @@
+{
+  "editor": {
+    "viewer": {
+      "windowTitle": "Pairview Viewer"
+    }
+  },
+  "library": {
+    "splash": {
+      "brand": "Pairview"
+    }
+  },
+  "settings": {
+    "data": {
+      "totalUsed": "Pairview is using {{size}} on this device."
+    },
+    "general": {
+      "nativeTitlebarDesc": "Use your system's default window titlebar instead of Pairview's custom one."
+    }
+  }
+}
