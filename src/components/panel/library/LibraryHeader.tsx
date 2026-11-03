@@ -60,6 +60,8 @@ import Dropdown from '../../ui/Dropdown';
 import { useSettingsStore } from '../../../store/useSettingsStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { ADVANCED_QUERY_REGEX } from '../../../hooks/useSortedLibrary';
+import PvFilterSection from '../../../pv/grid/PvFilterSection'; // PV
+import { pvFilterActive } from '../../../pv/grid/filter'; // PV
 
 function DropdownMenu({ buttonContent, buttonTitle, children, contentClassName = 'w-56', onOpenChange }: any) {
   const [isOpen, setIsOpen] = useState(false);
@@ -575,7 +577,8 @@ export function ViewOptionsDropdown({
     (filterCriteria.rawStatus && filterCriteria.rawStatus !== RawStatus.All) ||
     (filterCriteria.editedStatus && filterCriteria.editedStatus !== EditedStatus.All) ||
     (filterCriteria.flagStatus && filterCriteria.flagStatus !== FlagStatus.All) ||
-    (filterCriteria.colors && filterCriteria.colors.length > 0);
+    (filterCriteria.colors && filterCriteria.colors.length > 0) ||
+    pvFilterActive(filterCriteria.pv); // PV
 
   const [lastClickedColor, setLastClickedColor] = useState<string | null>(null);
   const allColors = useMemo(() => [...COLOR_LABELS, { name: 'none', color: '#9ca3af' }], []);
@@ -750,6 +753,13 @@ export function ViewOptionsDropdown({
               />
             </div>
           </div>
+
+          {/* PV: Photo-type and Keep-RAW filters */}
+          <PvFilterSection
+            filter={filterCriteria.pv}
+            onChange={(pv) => setFilterCriteria((prev: FilterCriteria) => ({ ...prev, pv }))}
+            Switch={SegmentedSwitch}
+          />
 
           <div>
             <Text as="div" variant={TextVariants.small} weight={TextWeights.semibold} className="px-3 py-1 uppercase">

@@ -376,6 +376,8 @@ export const RATING_OPERATORS = {
   },
 } as const;
 
+import type { PvFilter } from '../../pv/grid/filter'; // PV
+
 export interface FilterCriteria {
   colors: Array<string>;
   rating: number;
@@ -383,6 +385,7 @@ export interface FilterCriteria {
   rawStatus: RawStatus;
   editedStatus?: EditedStatus;
   flagStatus?: FlagStatus;
+  pv?: PvFilter; // PV: Pairview Photo-type / Keep-RAW filters
 }
 
 export interface Folder {

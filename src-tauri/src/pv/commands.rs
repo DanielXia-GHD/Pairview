@@ -332,16 +332,24 @@ pub fn pv_photo_detail(
         .map_err(err)
 }
 
-/// The Photos of a folder as upstream `ImageFile`s (one per Photo: its representative file), so
-/// RapidRAW's grid, thumbnails and editor work on Photos. `None` when the folder isn't in a
-/// scanned location (or is a format sub-folder): the caller lists the disk as before.
+#[derive(Serialize)]
+pub struct FolderListing {
+    /// One upstream `ImageFile` per Photo (its representative file), so RapidRAW's grid,
+    /// thumbnails and editor work on Photos.
+    pub images: Vec<crate::file_management::ImageFile>,
+    /// The same Photos with Pairview's details (state, badges, Keep-RAW), for the grid overlay.
+    pub photos: Vec<PhotoItem>,
+}
+
+/// A folder's Photos for the library grid. `None` when the folder isn't in a scanned location (or
+/// is a format sub-folder): the caller lists the disk as before.
 #[tauri::command(async)]
 pub fn pv_list_images_for_path(
     app: AppHandle,
     state: State<PvState>,
     path: String,
     recursive: bool,
-) -> Result<Option<Vec<crate::file_management::ImageFile>>, String> {
+) -> Result<Option<FolderListing>, String> {
     (|| {
         let listing = state.read(|cat| {
             let Some((folder_id, false)) = queries::folder_at_path(cat, Path::new(&path))? else {
@@ -353,8 +361,13 @@ pub fn pv_list_images_for_path(
             };
             let mut entries = Vec::new();
             let mut sidecars = HashMap::new();
-            for item in queries::list_photos(cat, &scope, &Sort::default(), &Filter::default())? {
-                let Some(file) = item.representative_path.or(item.display_path) else {
+            let photos = queries::list_photos(cat, &scope, &Sort::default(), &Filter::default())?;
+            for item in &photos {
+                let Some(file) = item
+                    .representative_path
+                    .clone()
+                    .or(item.display_path.clone())
+                else {
                     continue;
                 };
                 let name = file
@@ -367,11 +380,12 @@ pub fn pv_list_images_for_path(
                 }
                 entries.push((file, (item.modified / 1000).max(0) as u64));
             }
-            Ok(Some((entries, sidecars)))
+            Ok(Some((entries, sidecars, photos)))
         })?;
         // Reading RapidRAW's sidecars happens outside the catalog lock.
-        Ok(listing.map(|(entries, sidecars)| {
-            crate::file_management::image_files_for_paths(entries, sidecars, &app)
+        Ok(listing.map(|(entries, sidecars, photos)| FolderListing {
+            images: crate::file_management::image_files_for_paths(entries, sidecars, &app),
+            photos,
         }))
     })()
     .map_err(err)

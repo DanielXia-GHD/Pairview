@@ -2,6 +2,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { ImageFile } from '../components/ui/AppProperties';
+import { usePvPhotoStore } from './store';
 
 // ---- Types (mirror the Rust structs, camelCase) ----
 
@@ -185,11 +186,25 @@ export const pvApi = {
  * a scanned Pairview location (or the backend isn't ready): the caller then lists the disk.
  */
 export async function pvImagesForPath(path: string | null, recursive: boolean): Promise<ImageFile[] | null> {
-  if (!path) return null;
+  const { setPhotos, clear } = usePvPhotoStore.getState();
+  if (!path) {
+    clear();
+    return null;
+  }
   try {
-    return await invoke<ImageFile[] | null>('pv_list_images_for_path', { path, recursive });
+    const listing = await invoke<{ images: ImageFile[]; photos: PhotoItem[] } | null>('pv_list_images_for_path', {
+      path,
+      recursive,
+    });
+    if (!listing) {
+      clear();
+      return null;
+    }
+    setPhotos(listing.photos);
+    return listing.images;
   } catch (e) {
     console.warn('Pairview listing failed, falling back to the folder listing:', e);
+    clear();
     return null;
   }
 }

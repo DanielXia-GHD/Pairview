@@ -62,6 +62,38 @@
     },
     "tree": {
       "title": "Library"
+    },
+    "grid": {
+      "state": {
+        "raw_display": "RAW + display copy",
+        "edited": "Edited from the RAW",
+        "display_only": "Display copy only (no RAW)",
+        "raw_only": "RAW only",
+        "orphan_raw": "RAW whose display copy was deleted outside Pairview"
+      },
+      "mismatch": "Same name but taken at different times: not treated as a pair",
+      "keepRaw": "Keep RAW (locked)",
+      "dropRaw": "RAW marked to drop",
+      "dateUncertain": "Date may be wrong",
+      "filter": {
+        "photoTitle": "Filter by Photo",
+        "keepRawTitle": "Filter by Keep RAW",
+        "photo": {
+          "all": "All",
+          "pairs": "Pairs",
+          "displayOnly": "HIF/JPG",
+          "rawOnly": "RAW",
+          "orphans": "⚠ Orphans",
+          "mismatch": "Mismatch",
+          "edited": "Edited"
+        },
+        "keepRaw": {
+          "all": "All",
+          "auto": "Auto",
+          "keep": "Keep",
+          "drop": "Drop"
+        }
+      }
     }
   }
 }

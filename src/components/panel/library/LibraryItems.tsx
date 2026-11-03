@@ -26,6 +26,7 @@ import { useSettingsStore } from '../../../store/useSettingsStore';
 import { useLibraryStore } from '../../../store/useLibraryStore';
 import { isImmichAlbumId } from '../../immich/immichApi';
 import { IconAperture, IconFocalLength, IconIso, IconShutter } from '../editor/ExifIcons';
+import PvTileBadge from '../../../pv/grid/PvTileBadge'; // PV
 
 const LIST_DATE_FORMAT = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 const LIST_TIME_FORMAT = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' });
@@ -285,6 +286,9 @@ const ThumbnailComponent = ({
               <ImageIcon className="text-text-secondary animate-pulse" />
             </div>
           ))}
+
+        {/* PV: Photo badge (RAW+HIF, HIF, ⚠ RAW, …) */}
+        {!isCloudPlaceholder && <PvTileBadge path={path} />}
 
         {isCloudPlaceholder && layers.length > 0 && (
           <div
