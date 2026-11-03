@@ -23,6 +23,7 @@ use serde::Serialize;
 use crate::pv::assets;
 use crate::pv::catalog::Catalog;
 use crate::pv::locations::{self, Location};
+use crate::pv::metadata;
 use crate::pv::scan::{l0, l1};
 
 /// Tauri event sent to the frontend when a location's folders changed.
@@ -172,8 +173,8 @@ pub struct SyncOutcome {
     pub files_held: bool,
 }
 
-/// One sync of a location: L0 scan, pairing for changed shoots, L1 metadata for them. Does
-/// nothing while the location is offline.
+/// One sync of a location: L0 scan, pairing for changed shoots, L1 metadata and sidecar
+/// ratings for them. Does nothing while the location is offline.
 pub fn sync_once(
     cat: &mut Catalog,
     location: &Location,
@@ -210,6 +211,8 @@ pub fn sync_once(
         }
     }
     l1::run(cat, &shoots)?;
+    // Ratings and labels changed by Lightroom, RapidRAW, … (reads only).
+    metadata::sync_shoots(cat, &shoots)?;
     outcome.change = Some(FolderChanged {
         location_id: location.id,
         folders: scan.changed_folders,

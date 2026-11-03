@@ -6,5 +6,7 @@ pub mod catalog;
 pub mod exif_read;
 pub mod heif;
 pub mod locations;
+pub mod metadata;
 pub mod scan;
 pub mod thumbs;
+pub mod xmp;
