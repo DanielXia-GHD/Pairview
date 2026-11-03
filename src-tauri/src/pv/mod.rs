@@ -3,3 +3,4 @@
 
 pub mod catalog;
 pub mod heif;
+pub mod locations;
