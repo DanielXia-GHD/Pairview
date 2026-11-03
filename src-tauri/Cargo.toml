@@ -30,6 +30,7 @@ bytemuck = { version = "1.25", features = ["derive"] }
 anyhow = "1.0.104"
 kamadak-exif = "0.6.1"
 rusqlite = { version = "0.37", features = ["bundled"] } # PV: Pairview catalog
+notify = "8" # PV: FSEvents for local Library Locations (pv/scan/watch.rs)
 rawler = { git = "https://github.com/CyberTimon/RapidRAW-DngLab.git" }
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1.25", features = ["v4", "serde"] }

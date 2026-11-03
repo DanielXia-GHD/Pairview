@@ -76,6 +76,8 @@ pub struct ScanStats {
     pub files_added: usize,
     pub files_changed: usize,
     pub files_removed: usize,
+    /// Files skipped this time because they may still be arriving (see `Stability`).
+    pub files_held: usize,
     /// Folders whose files or sub-folders changed. Their shoots need pairing again (M1-04).
     pub changed_folders: Vec<i64>,
 }
@@ -114,11 +116,65 @@ pub fn is_format_subdir(name: &str) -> bool {
     FORMAT_SUBDIRS.iter().any(|d| d.eq_ignore_ascii_case(name))
 }
 
+/// Holds back files that may still be arriving (an FTP upload from the camera, a copy in
+/// progress): a recently modified file is recorded only once two scans in a row see the same
+/// size and mtime. Older files are never held, so a first scan of an existing library isn't
+/// delayed.
+#[derive(Debug, Default)]
+pub struct Stability {
+    recent_ms: i64,
+    seen: HashMap<PathBuf, (i64, i64)>,
+}
+
+impl Stability {
+    /// `recent`: how old a file's mtime must be before it's trusted without a second look.
+    /// The watcher uses twice its poll interval.
+    pub fn new(recent: std::time::Duration) -> Self {
+        Self {
+            recent_ms: recent.as_millis() as i64,
+            seen: HashMap::new(),
+        }
+    }
+
+    fn hold(&mut self, path: &Path, size: i64, mtime: i64, now: i64) -> bool {
+        // abs(): a NAS clock running ahead makes fresh files look like they're from the future.
+        if (now - mtime).abs() > self.recent_ms {
+            self.seen.remove(path);
+            return false;
+        }
+        self.seen.insert(path.to_path_buf(), (size, mtime)) != Some((size, mtime))
+    }
+}
+
 /// Scans `location` into the catalog in one transaction.
 pub fn scan_location(
     cat: &mut Catalog,
     location: &Location,
     opts: &ScanOptions,
+) -> Result<ScanStats> {
+    scan(cat, location, opts, &mut |_, _, _| false)
+}
+
+/// Like `scan_location`, but holds back files that may still be arriving (see `Stability`).
+pub fn scan_location_stable(
+    cat: &mut Catalog,
+    location: &Location,
+    opts: &ScanOptions,
+    stability: &mut Stability,
+) -> Result<ScanStats> {
+    let now = now_ms();
+    scan(cat, location, opts, &mut |path, size, mtime| {
+        stability.hold(path, size, mtime, now)
+    })
+}
+
+type Hold<'a> = dyn FnMut(&Path, i64, i64) -> bool + 'a;
+
+fn scan(
+    cat: &mut Catalog,
+    location: &Location,
+    opts: &ScanOptions,
+    hold: &mut Hold,
 ) -> Result<ScanStats> {
     let root = location.path.clone();
     if !fs::metadata(&root)
@@ -147,6 +203,7 @@ pub fn scan_location(
             &dir,
             &rel,
             opts,
+            hold,
             &mut stats,
             &mut stack,
         )?;
@@ -174,6 +231,7 @@ fn scan_folder(
     dir: &Path,
     rel: &str,
     opts: &ScanOptions,
+    hold: &mut Hold,
     stats: &mut ScanStats,
     stack: &mut Vec<(i64, PathBuf, String)>,
 ) -> Result<()> {
@@ -283,7 +341,14 @@ fn scan_folder(
         })?
         .collect::<rusqlite::Result<_>>()?
     };
+    let held_before = stats.files_held;
     for (name, size, file_mtime) in files {
+        if hold(&dir.join(&name), size, file_mtime) {
+            // Not recorded yet, and an existing row is left as it was.
+            known.remove(&name);
+            stats.files_held += 1;
+            continue;
+        }
         match known.remove(&name) {
             Some(f) if f.size == size && f.mtime == file_mtime => {}
             Some(f) => {
@@ -319,6 +384,10 @@ fn scan_folder(
 
     if stats.changes() != before {
         stats.changed_folders.push(id);
+    }
+    // With files held back, leave the folder unmarked so the next scan lists it again.
+    if stats.files_held != held_before {
+        return Ok(());
     }
     if db.mtime != Some(mtime) || !settled {
         tx.execute(
