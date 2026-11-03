@@ -2551,6 +2551,10 @@ pub fn run() {
             file_management::start_thumbnail_workers(app_handle.clone());
             file_management::start_metadata_workers(app_handle.clone());
             ai_jobs::start_worker(app_handle.clone());
+            // PV: Pairview catalog and location watchers.
+            if let Err(e) = pv::commands::setup(&app_handle) {
+                log::error!("Pairview setup failed: {e:#}");
+            }
             jxl_oxide::integration::register_image_decoding_hook();
 
             let window_cfg = app.config().app.windows.first().unwrap().clone();
@@ -2948,6 +2952,20 @@ pub fn run() {
             immich::commands::immich_prepare_export,
             immich::commands::immich_remove_from_album,
             immich::commands::immich_timeline,
+            // PV: Pairview commands (src/pv/api.ts)
+            pv::commands::pv_locations_list,
+            pv::commands::pv_locations_add,
+            pv::commands::pv_locations_remove,
+            pv::commands::pv_locations_rename,
+            pv::commands::pv_locations_reorder,
+            pv::commands::pv_locations_suggest_relocation,
+            pv::commands::pv_locations_relocate,
+            pv::commands::pv_locations_rescan,
+            pv::commands::pv_folder_tree,
+            pv::commands::pv_list_photos,
+            pv::commands::pv_dates,
+            pv::commands::pv_photo_detail,
+            pv::commands::pv_set_metadata,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

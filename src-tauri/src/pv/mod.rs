@@ -3,10 +3,12 @@
 
 pub mod assets;
 pub mod catalog;
+pub mod commands;
 pub mod exif_read;
 pub mod heif;
 pub mod locations;
 pub mod metadata;
+pub mod queries;
 pub mod scan;
 pub mod thumbs;
 pub mod xmp;

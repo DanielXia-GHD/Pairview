@@ -40,7 +40,7 @@ use crate::tagging::COLOR_TAG_PREFIX;
 /// Color labels Pairview offers (stored lowercase; XMP gets `Red`, … like Lightroom).
 pub const COLOR_LABELS: &[&str] = &["red", "yellow", "green", "blue", "purple"];
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Flag {
     #[default]
@@ -68,7 +68,7 @@ impl Flag {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum KeepRaw {
     #[default]

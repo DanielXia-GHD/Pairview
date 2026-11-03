@@ -53,7 +53,8 @@ pub struct Location {
     pub last_scan_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Status {
     Online,
     /// The volume isn't mounted (NAS share disconnected, drive unplugged). Offer Connect.
@@ -165,7 +166,7 @@ pub fn status(location: &Location, mounts: &[Mount]) -> Status {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Suggestion {
     pub path: PathBuf,
     /// Same volume identity. `false` means the same share name on another server address
