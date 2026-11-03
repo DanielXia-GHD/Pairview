@@ -35,7 +35,7 @@ pub fn encode_heif(
 }
 
 #[cfg(target_os = "macos")]
-pub use imp::{decode_heif, heif_thumbnail};
+pub use imp::{decode_heif, heif_thumbnail, properties};
 
 // Used by the edit-overwrite flow in M3 (docs/IMPLEMENTATION_PLAN.md, M3-02).
 #[cfg(target_os = "macos")]
@@ -138,15 +138,15 @@ mod imp {
             .as_i32()
     }
 
-    #[cfg(test)]
-    fn test_props(bytes: &[u8]) -> Option<CFRetained<CFDictionary<CFString, CFType>>> {
+    /// All ImageIO properties of the first image (EXIF, TIFF, GPS, … as nested dictionaries).
+    pub fn properties(bytes: &[u8]) -> Option<CFRetained<CFDictionary<CFString, CFType>>> {
         let props = unsafe { open_source(bytes).ok()?.properties_at_index(0, None) }?;
         Some(unsafe { CFRetained::cast_unchecked(props) })
     }
 
     #[cfg(test)]
     pub(super) fn depth(bytes: &[u8]) -> Option<i32> {
-        test_props(bytes)?
+        properties(bytes)?
             .get(unsafe { kCGImagePropertyDepth })?
             .downcast::<CFNumber>()
             .ok()?
@@ -160,7 +160,7 @@ mod imp {
             kCGImagePropertyExifDateTimeOriginal, kCGImagePropertyExifDictionary,
             kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFModel,
         };
-        let Some(props) = test_props(bytes) else {
+        let Some(props) = properties(bytes) else {
             return (None, None);
         };
         let nested = |dict: &CFString, key: &CFString| -> Option<String> {

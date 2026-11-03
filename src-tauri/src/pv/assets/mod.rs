@@ -197,6 +197,7 @@ pub fn rebuild_shoot(tx: &Transaction, shoot_id: i64) -> Result<PairStats> {
             }
         }
     }
+    update_capture_times(tx, shoot_id)?;
     Ok(stats)
 }
 
@@ -320,6 +321,86 @@ fn guard(raw: Option<&GuardExif>, display: Option<&GuardExif>) -> Guard {
         (Some(_), Some(_)) => Guard::Match,
         _ => Guard::Unknown,
     }
+}
+
+/// Sets each Photo's capture time: EXIF (RAW first, then the display copy), else the folder's
+/// date hint, else the file's mtime. `date_uncertain` marks Photos whose EXIF date is more than a
+/// day from the folder's date, and Photos dated only by mtime.
+fn update_capture_times(tx: &Transaction, shoot_id: i64) -> Result<()> {
+    let hint: Option<String> = tx.query_row(
+        "SELECT date_hint FROM folders WHERE id = ?1",
+        [shoot_id],
+        |r| r.get(0),
+    )?;
+    let hint_date = hint
+        .as_deref()
+        .and_then(|h| chrono::NaiveDate::parse_from_str(h, "%Y-%m-%d").ok());
+    let mut stmt = tx.prepare_cached(
+        "SELECT p.id, p.captured_at, p.date_source, p.date_uncertain,
+                COALESCE(r.date_original, d.date_original),
+                CASE WHEN r.date_original IS NOT NULL THEN r.subsec_ms ELSE d.subsec_ms END,
+                (SELECT mtime FROM files WHERE id = p.representative_file_id)
+         FROM photos p
+         LEFT JOIN exif r ON r.file_id = p.representative_file_id
+         LEFT JOIN exif d ON d.file_id = p.display_file_id
+         WHERE p.shoot_folder_id = ?1",
+    )?;
+    type Row = (
+        i64,
+        Option<String>,
+        Option<String>,
+        bool,
+        Option<String>,
+        Option<i64>,
+        Option<i64>,
+    );
+    let rows: Vec<Row> = stmt
+        .query_map([shoot_id], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    for (id, captured, source, uncertain, exif_date, subsec, mtime) in rows {
+        let (new_captured, new_source, new_uncertain) = if let Some(date) = exif_date {
+            let far_from_hint = match (
+                hint_date,
+                NaiveDateTime::parse_from_str(&date, "%Y-%m-%dT%H:%M:%S"),
+            ) {
+                (Some(h), Ok(d)) => (d.date() - h).num_days().abs() > 1,
+                _ => false,
+            };
+            let captured = match subsec {
+                Some(ms) => format!("{date}.{ms:03}"),
+                None => date,
+            };
+            (Some(captured), Some("exif"), far_from_hint)
+        } else if let Some(h) = &hint {
+            (Some(format!("{h}T00:00:00")), Some("folder"), false)
+        } else {
+            let local = mtime.and_then(DateTime::from_timestamp_millis).map(|t| {
+                t.with_timezone(&chrono::Local)
+                    .format("%Y-%m-%dT%H:%M:%S")
+                    .to_string()
+            });
+            (local, Some("mtime"), true)
+        };
+        if captured != new_captured || source.as_deref() != new_source || uncertain != new_uncertain
+        {
+            tx.execute(
+                "UPDATE photos SET captured_at = ?2, date_source = ?3, date_uncertain = ?4
+                 WHERE id = ?1",
+                (id, new_captured, new_source, new_uncertain),
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn update_date_hint(tx: &Transaction, shoot_id: i64) -> Result<()> {
