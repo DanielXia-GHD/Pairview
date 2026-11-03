@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::pv::catalog::{self, Catalog};
-use crate::pv::locations::{self, Location, Status, Suggestion};
+use crate::pv::locations::{self, Location, LocationSettings, Status, Suggestion};
 use crate::pv::metadata::{self, Change, Flag, KeepRaw, PhotoMeta};
 use crate::pv::queries::{self, DayCount, Filter, FolderNode, PhotoDetail, PhotoItem, Scope, Sort};
 use crate::pv::scan::watch::{self, FOLDER_CHANGED_EVENT, LocationWatcher, WatchOptions};
@@ -102,6 +102,7 @@ pub struct LocationInfo {
     pub photos: i64,
     pub sort_order: i64,
     pub last_scan_at: Option<i64>,
+    pub settings: LocationSettings,
 }
 
 fn location_info(
@@ -117,6 +118,7 @@ fn location_info(
     )?;
     Ok(LocationInfo {
         status: locations::status(&location, mounts),
+        settings: LocationSettings::of(&location),
         connect_url: location
             .volume_id
             .as_deref()
@@ -232,6 +234,57 @@ pub fn pv_locations_rescan(app: AppHandle, state: State<PvState>, id: i64) -> Re
         start_watcher(&app, &state, &location)
     })()
     .map_err(err)
+}
+
+#[tauri::command(async)]
+pub fn pv_locations_update_settings(
+    app: AppHandle,
+    state: State<PvState>,
+    id: i64,
+    settings: LocationSettings,
+) -> Result<LocationInfo, String> {
+    (|| {
+        let cat = state.writer()?;
+        locations::update_settings(&cat, id, &settings)?;
+        let location = locations::get(&cat, id)?.context("location vanished")?;
+        // New excludes / interval take effect with a fresh watcher (and a sync now).
+        stop_watcher(&state, id);
+        start_watcher(&app, &state, &location)?;
+        location_info(&cat, location, &locations::mounts())
+    })()
+    .map_err(err)
+}
+
+/// Asks macOS to mount the location's network share (opens its `smb://` address, which comes
+/// from the catalog, never from the frontend).
+#[tauri::command(async)]
+pub fn pv_locations_connect(state: State<PvState>, id: i64) -> Result<(), String> {
+    (|| {
+        let location = state
+            .read(|cat| locations::get(cat, id))?
+            .context("no such location")?;
+        let url = location
+            .volume_id
+            .as_deref()
+            .and_then(locations::connect_url)
+            .context("this location is not a network share")?;
+        open_url(url)
+    })()
+    .map_err(err)
+}
+
+#[cfg(target_os = "macos")]
+fn open_url(url: &str) -> Result<()> {
+    let status = std::process::Command::new("/usr/bin/open")
+        .arg(url)
+        .status()?;
+    anyhow::ensure!(status.success(), "could not open {url}");
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_url(url: &str) -> Result<()> {
+    anyhow::bail!("connecting to {url} is not supported on this platform yet")
 }
 
 // ---- Browsing ---------------------------------------------------------------------------------

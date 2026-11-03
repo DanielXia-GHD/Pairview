@@ -57,6 +57,8 @@ import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { useOsPlatform } from '../../hooks/useOsPlatform';
 import { useCloudUsage } from '../../hooks/useCloudUsage';
 import { open } from '@tauri-apps/plugin-shell';
+import { FolderTree } from 'lucide-react'; // PV
+import LocationsSettings from '../../pv/locations/LocationsSettings'; // PV: Library Locations
 import ImmichSettings from '../immich/ImmichSettings';
 import DataManagementSettings from './settings/DataManagementSettings';
 import EditInAppsSettings from './settings/EditInAppsSettings';
@@ -647,6 +649,7 @@ export default function SettingsPanel({
   const settingCategories = useMemo(
     () => [
       { id: 'general', label: t('settings.categories.general'), icon: SlidersHorizontal },
+      { id: 'library', label: t('pv.settings.library'), icon: FolderTree }, // PV: Library Locations
       { id: 'processing', label: t('settings.categories.processing'), icon: Cpu },
       { id: 'shortcuts', label: t('settings.categories.shortcuts'), icon: Keyboard },
     ],
@@ -2442,6 +2445,25 @@ export default function SettingsPanel({
                       onSettingsChange={onSettingsChange}
                       rootPaths={effectiveRootPaths}
                     />
+                  </div>
+                </motion.div>
+              )}
+
+              {/* PV: Library Locations */}
+              {activeCategory === 'library' && (
+                <motion.div
+                  key="library"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-10"
+                >
+                  <div className="p-6 bg-surface rounded-xl shadow-md">
+                    <Text variant={TextVariants.title} color={TextColors.accent} className="mb-5">
+                      {t('pv.locations.title')}
+                    </Text>
+                    <LocationsSettings />
                   </div>
                 </motion.div>
               )}

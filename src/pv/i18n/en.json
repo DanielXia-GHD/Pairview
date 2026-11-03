@@ -16,5 +16,49 @@
     "general": {
       "nativeTitlebarDesc": "Use your system's default window titlebar instead of Pairview's custom one."
     }
+  },
+  "pv": {
+    "settings": {
+      "library": "Library"
+    },
+    "locations": {
+      "title": "Library Locations",
+      "intro": "Folders Pairview browses: your internal disk, external drives or a NAS share. Nothing is copied, and removing a location never touches its files.",
+      "empty": "No locations yet. Add the folder where your photos live, for example your NAS's DCIM folder.",
+      "add": "Add location…",
+      "pickFolder": "Choose a folder of photos",
+      "pickNewPath": "Where is “{{name}}” now?",
+      "photos_one": "{{count}} photo",
+      "photos_other": "{{count}} photos",
+      "status": {
+        "online": "Online",
+        "notMounted": "Not connected",
+        "missing": "Folder not found",
+        "differentVolume": "A different disk is at this path",
+        "unreachable": "Not responding"
+      },
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "rename": "Rename",
+      "rescan": "Rescan now",
+      "settings": "Location settings",
+      "connect": "Connect",
+      "relocate": "Find it…",
+      "noSuggestions": "Pairview couldn't find this folder on any connected disk.",
+      "checkAddress": "same share name, different server address: check it's the right one",
+      "useThis": "Use this",
+      "chooseFolder": "Choose folder…",
+      "excludes": "Skip folders",
+      "excludesDesc": "Comma-separated folder names, or paths inside this location. NAS system folders (@eaDir, #recycle) are always skipped.",
+      "pollInterval": "Check for new files every",
+      "pollDefault": "60 seconds (default)",
+      "pollSeconds_one": "{{count}} second",
+      "pollSeconds_other": "{{count}} seconds",
+      "pollDesc": "How often Pairview looks for new or changed files, for example camera uploads to the NAS. Local disks also update instantly.",
+      "remove": "Remove location…",
+      "confirmRemove": "Remove from Pairview",
+      "cancel": "Cancel",
+      "removeDesc": "Pairview forgets this location and its cached thumbnails and data. Your photos and sidecar files stay where they are."
+    }
   }
 }

@@ -306,6 +306,44 @@ pub fn rename(cat: &Catalog, id: i64, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Per-location scan settings, stored in `settings_json` next to any other keys.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocationSettings {
+    /// Folder names, or paths relative to the location, to skip (pv::scan::l0).
+    pub excludes: Vec<String>,
+    /// Poll interval for the watcher (pv::scan::watch); `None` = the default.
+    pub poll_seconds: Option<u64>,
+}
+
+impl LocationSettings {
+    pub fn of(location: &Location) -> Self {
+        serde_json::from_str(&location.settings_json).unwrap_or_default()
+    }
+}
+
+pub fn update_settings(cat: &Catalog, id: i64, settings: &LocationSettings) -> Result<()> {
+    let location = get(cat, id)?.ok_or_else(|| anyhow!("no location with id {id}"))?;
+    let mut json: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&location.settings_json).unwrap_or_default();
+    let excludes: Vec<String> = settings
+        .excludes
+        .iter()
+        .map(|e| e.trim().trim_matches('/').to_string())
+        .filter(|e| !e.is_empty())
+        .collect();
+    json.insert("excludes".into(), serde_json::json!(excludes));
+    match settings.poll_seconds {
+        Some(s) => json.insert("pollSeconds".into(), serde_json::json!(s.max(5))),
+        None => json.remove("pollSeconds"),
+    };
+    cat.conn().execute(
+        "UPDATE locations SET settings_json = ?2 WHERE id = ?1",
+        (id, serde_json::Value::Object(json).to_string()),
+    )?;
+    Ok(())
+}
+
 /// Sets the sidebar order to `ids` (first = top).
 pub fn reorder(cat: &mut Catalog, ids: &[i64]) -> Result<()> {
     let tx = cat.conn_mut().transaction()?;
@@ -716,6 +754,34 @@ mod tests {
         let all = list(&cat).unwrap();
         assert_eq!(all.iter().map(|l| l.id).collect::<Vec<_>>(), [id_b, id_a]);
         assert_eq!(all[1].name, "Desktop copy");
+    }
+
+    #[test]
+    fn settings_round_trip_and_feed_the_scanner_and_watcher() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cat = Catalog::open_in_memory().unwrap();
+        let id = add(&cat, tmp.path(), None).unwrap();
+        let settings = LocationSettings {
+            excludes: vec![" exports/ ".into(), "".into(), "2026/old".into()],
+            poll_seconds: Some(1),
+        };
+        update_settings(&cat, id, &settings).unwrap();
+        let loc = get(&cat, id).unwrap().unwrap();
+        assert_eq!(
+            LocationSettings::of(&loc),
+            LocationSettings {
+                excludes: vec!["exports".into(), "2026/old".into()],
+                poll_seconds: Some(5),
+            }
+        );
+        let scan = crate::pv::scan::l0::ScanOptions::for_location(&loc);
+        assert_eq!(scan.excludes, ["exports", "2026/old"]);
+        let watch = crate::pv::scan::watch::WatchOptions::for_location(&loc);
+        assert_eq!(watch.poll_interval, Duration::from_secs(5));
+
+        update_settings(&cat, id, &LocationSettings::default()).unwrap();
+        let loc = get(&cat, id).unwrap().unwrap();
+        assert_eq!(LocationSettings::of(&loc), LocationSettings::default());
     }
 
     #[test]

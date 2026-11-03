@@ -2961,6 +2961,8 @@ pub fn run() {
             pv::commands::pv_locations_suggest_relocation,
             pv::commands::pv_locations_relocate,
             pv::commands::pv_locations_rescan,
+            pv::commands::pv_locations_update_settings,
+            pv::commands::pv_locations_connect,
             pv::commands::pv_folder_tree,
             pv::commands::pv_list_photos,
             pv::commands::pv_dates,

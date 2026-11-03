@@ -16,6 +16,14 @@ export interface LocationInfo {
   photos: number;
   sortOrder: number;
   lastScanAt: number | null;
+  settings: LocationSettings;
+}
+
+export interface LocationSettings {
+  /** Folder names, or paths relative to the location, to skip. */
+  excludes: string[];
+  /** Watcher poll interval; null = default (60 s). */
+  pollSeconds: number | null;
 }
 
 export interface RelocationSuggestion {
@@ -157,6 +165,10 @@ export const pvApi = {
     suggestRelocation: (id: number) => invoke<RelocationSuggestion[]>('pv_locations_suggest_relocation', { id }),
     relocate: (id: number, path: string) => invoke<LocationInfo>('pv_locations_relocate', { id, path }),
     rescan: (id: number) => invoke<void>('pv_locations_rescan', { id }),
+    updateSettings: (id: number, settings: LocationSettings) =>
+      invoke<LocationInfo>('pv_locations_update_settings', { id, settings }),
+    /** Asks macOS to mount the location's network share. */
+    connect: (id: number) => invoke<void>('pv_locations_connect', { id }),
   },
   folderTree: (locationId: number) => invoke<FolderNode[]>('pv_folder_tree', { locationId }),
   listPhotos: (scope: Scope, sort?: Sort, filter?: Filter) =>
