@@ -76,16 +76,21 @@ pub struct ScanStats {
     pub files_added: usize,
     pub files_changed: usize,
     pub files_removed: usize,
+    /// Folders whose files or sub-folders changed. Their shoots need pairing again (M1-04).
+    pub changed_folders: Vec<i64>,
 }
 
 impl ScanStats {
     pub fn changed(&self) -> bool {
+        self.changes() > 0
+    }
+
+    fn changes(&self) -> usize {
         self.folders_added
             + self.folders_removed
             + self.files_added
             + self.files_changed
             + self.files_removed
-            > 0
     }
 }
 
@@ -189,6 +194,7 @@ fn scan_folder(
 
     if !opts.full && db.mtime == Some(mtime) && settled {
         stats.folders_unchanged += 1;
+        let before = stats.changes();
         let mut stmt = tx.prepare_cached("SELECT id, name FROM folders WHERE parent_id = ?1")?;
         let children = stmt
             .query_map([id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
@@ -203,10 +209,14 @@ fn scan_folder(
                 stats.folders_removed += 1;
             }
         }
+        if stats.changes() != before {
+            stats.changed_folders.push(id);
+        }
         return Ok(());
     }
 
     stats.folders_listed += 1;
+    let before = stats.changes();
     let mut subdirs: Vec<String> = Vec::new();
     let mut files: Vec<(String, i64, i64)> = Vec::new();
     for entry in fs::read_dir(dir).with_context(|| format!("cannot list {}", dir.display()))? {
@@ -307,6 +317,9 @@ fn scan_folder(
         stats.files_removed += 1;
     }
 
+    if stats.changes() != before {
+        stats.changed_folders.push(id);
+    }
     if db.mtime != Some(mtime) || !settled {
         tx.execute(
             "UPDATE folders SET mtime = ?2, scanned_at = ?3 WHERE id = ?1",
