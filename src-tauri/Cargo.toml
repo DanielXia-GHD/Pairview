@@ -29,6 +29,7 @@ pollster = "1.0"
 bytemuck = { version = "1.25", features = ["derive"] }
 anyhow = "1.0.104"
 kamadak-exif = "0.6.1"
+rusqlite = { version = "0.37", features = ["bundled"] } # PV: Pairview catalog
 rawler = { git = "https://github.com/CyberTimon/RapidRAW-DngLab.git" }
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1.25", features = ["v4", "serde"] }
@@ -103,7 +104,7 @@ objc2-foundation = { version = "0.3.2", features = [
 ] }
 objc2-core-foundation = { version = "0.3.2", features = ["CFCGTypes", "CFData", "CFDictionary", "CFNumber", "CFString"] } # PV: CF types for heif.rs
 objc2-core-graphics = { version = "0.3.2", features = ["CGColorSpace", "CGContext", "CGBitmapContext", "CGImage"] } # PV: bitmap drawing for heif.rs
-objc2-image-io = { version = "0.3.2", features = ["CGImageSource", "CGImageProperties", "objc2-core-graphics"] } # PV: ImageIO HEIF decode
+objc2-image-io = { version = "0.3.2", features = ["CGImageSource", "CGImageDestination", "CGImageProperties", "objc2-core-graphics"] } # PV: ImageIO HEIF decode
 objc2-core-image = { version = "0.3.2", features = [
     "CIContext",
     "CIFilter",

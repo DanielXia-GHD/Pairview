@@ -46,7 +46,6 @@ mod focus_stacking;
 mod fog;
 mod formats;
 mod gpu_processing;
-mod heif; // PV: HEIF / Sony HIF support
 mod guided_perspective;
 mod hdr_deghosting;
 mod highlight_reconstruction;
@@ -66,6 +65,7 @@ mod panorama_stitching;
 mod panorama_utils;
 mod preset_converter;
 mod preview_jpeg;
+mod pv; // PV: all Pairview backend modules
 mod raw_processing;
 mod relight;
 mod storage;

@@ -218,8 +218,8 @@ pub fn load_base_image_from_bytes(
         }
     } else {
         // PV: HEIF / Sony HIF goes through ImageIO; the image crate cannot decode it.
-        let mut image = if crate::heif::is_heif_file(path_for_ext_check) {
-            crate::heif::decode_heif(bytes)?
+        let mut image = if crate::pv::heif::is_heif_file(path_for_ext_check) {
+            crate::pv::heif::decode_heif(bytes)?
         } else {
             load_image_with_orientation(bytes, cancel_token)?
         };
