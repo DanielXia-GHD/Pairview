@@ -18,7 +18,7 @@ Spike tool: [`spikes/m0/imageio_spike.swift`](../spikes/m0/imageio_spike.swift) 
 | 7 | **RapidRAW builds on M2** | Rust 1.98 via Homebrew `rustup` (keg-only: `export PATH=/opt/homebrew/opt/rustup/bin:$PATH`). Debug build ~1m40 incremental; debug + release `target/` uses **~13 GB** (disk is now down to 33 GB free). `npm install` OK | ✅ |
 | 8 | **Unsigned `.dmg`** (local) | `npm run tauri build -- --bundles dmg`: 12 min release build → `RapidRAW_1.6.7_aarch64.dmg` (32 MB), arm64, **ad-hoc signed** (opens via right-click → Open). Still RapidRAW-branded: Pairview branding is the next M0 task | ✅ |
 | 9 | XAVC HS 4:2:2 video playback | No sample clip yet | ⏸ Needs a sample |
-| 10 | CI | Upstream `ci.yml` builds ~10 platform variants (incl. Linux and Android) on every push. A slim `pairview-ci.yml` (macOS arm64 `.dmg` + Windows `.exe`) needs a decision on enabling Actions on the fork | ⏸ Owner decision |
+| 10 | CI | Upstream `ci.yml` builds ~10 platform variants (incl. Linux and Android) on every push. Upstream workflows are disabled in the fork's Actions settings (2026-11-03). `pairview-ci.yml` (macOS arm64 `.dmg`, manual or `pv-v*` tag) is the only active workflow | ⏳ First manual run pending |
 
 **Running-app check (2026-11-02, M0-02):** `npm start` with the owner browsing a local copy (`~/Desktop/2026-10-23_10261023`). The log shows HIF files decoding through ImageIO, portrait 4672×7008, in **0.47–0.50 s**. ARWs open in the editor. Two log errors: the update check finds no Pairview release yet (expected; to be silenced), and one upstream `Preview worker error: No original image loaded` while switching images quickly (watch). The grid still shows ARW and HIF as separate tiles until M1 (Photo grid).
 
