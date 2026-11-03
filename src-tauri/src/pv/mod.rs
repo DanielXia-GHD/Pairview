@@ -11,4 +11,5 @@ pub mod metadata;
 pub mod queries;
 pub mod scan;
 pub mod thumbs;
+pub mod viewer;
 pub mod xmp;

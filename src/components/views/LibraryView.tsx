@@ -14,6 +14,7 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { ImageFile, LibraryViewMode, ThumbnailAspectRatio, ThumbnailSize } from '../ui/AppProperties';
 import { GroupBadgeInfo, GroupId } from '../../utils/imageGrouping';
 import { getImageFlag } from '../../utils/imageFlags';
+import { pvOpenViewer } from '../../pv/viewer/PvViewer'; // PV
 
 interface LibraryViewProps {
   sortedImageList: ImageFile[];
@@ -159,7 +160,8 @@ export default function LibraryView({
             onEmptyAreaContextMenu={handleMainLibraryContextMenu}
             onGoHome={handleGoHome}
             onImageClick={handleLibraryImageSingleClick}
-            onImageDoubleClick={handleImageSelect}
+            // PV: a Pairview Photo opens in the viewer; anything else in the editor as before.
+            onImageDoubleClick={(path: string) => pvOpenViewer(path) || handleImageSelect(path)}
             onImportClick={handleMainLibraryImportClick}
             onLibraryRefresh={handleLibraryRefresh}
             onOpenFolder={handleOpenFolder}

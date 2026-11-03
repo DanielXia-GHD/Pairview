@@ -101,6 +101,26 @@
       "undated": "No date",
       "uncertain_one": "{{count}} photo's date may be wrong",
       "uncertain_other": "{{count}} photos' dates may be wrong"
+    },
+    "viewer": {
+      "title": "Viewer",
+      "close": "Back to the grid (Esc)",
+      "edit": "Edit the RAW (E)",
+      "fullscreen": "Full screen (F)",
+      "previous": "Previous (←)",
+      "next": "Next (→)",
+      "rating_one": "{{count}} star",
+      "rating_other": "{{count}} stars",
+      "flag": {
+        "pick": "Pick",
+        "reject": "Rejected"
+      },
+      "keepRaw": {
+        "keep": "Keep RAW",
+        "drop": "Drop RAW"
+      },
+      "keysHint": "0–5 rate · P/X flag · 6–9 label · K keep RAW · Z zoom · F full screen",
+      "cannotShow": "This photo can't be shown."
     }
   }
 }

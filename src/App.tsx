@@ -84,6 +84,7 @@ import ImageProcessingManager from './components/managers/ImageProcessingManager
 import ImageLoaderManager from './components/managers/ImageLoaderManager';
 import { isImmichAlbumId } from './components/immich/immichApi';
 import { useImmichEvents } from './components/immich/useImmichEvents';
+import PvViewer from './pv/viewer/PvViewer'; // PV
 
 const DND_MEASURING = { droppable: { strategy: MeasuringStrategy.Always } };
 
@@ -1070,6 +1071,8 @@ function App() {
           handleCreateAlbumItem={handleCreateAlbumItem}
           handleRenameAlbumItem={handleRenameAlbumItem}
         />
+        {/* PV: Pixea-style viewer (Space / double-click on a Photo) */}
+        <PvViewer sortedImageList={sortedImageList} onOpenEditor={(path) => handleImageSelect(path)} />
         <ToastContainer
           position="bottom-right"
           autoClose={5000}

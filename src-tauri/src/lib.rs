@@ -2798,6 +2798,10 @@ pub fn run() {
                 session: ViewerSession::default(),
             }),
         })
+        // PV: viewer images (pvimg://localhost/photo/<id>)
+        .register_asynchronous_uri_scheme_protocol(pv::viewer::SCHEME, |ctx, request, responder| {
+            pv::viewer::handle(ctx.app_handle().clone(), request, responder)
+        })
         .invoke_handler(tauri::generate_handler![
             apply_adjustments,
             subscribe_analytics,

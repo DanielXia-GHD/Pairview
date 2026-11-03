@@ -30,7 +30,7 @@ impl PvState {
         Catalog::open(&self.catalog_path)
     }
 
-    fn read<T>(&self, f: impl FnOnce(&Catalog) -> Result<T>) -> Result<T> {
+    pub(crate) fn read<T>(&self, f: impl FnOnce(&Catalog) -> Result<T>) -> Result<T> {
         let cat = self
             .reader
             .lock()
