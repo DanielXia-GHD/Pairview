@@ -94,11 +94,7 @@ export default function LocationsSettings() {
     <div className="space-y-4">
       <Text variant={TextVariants.small}>{t('pv.locations.intro')}</Text>
 
-      {locations.length === 0 && (
-        <Text variant={TextVariants.body} color={TextColors.secondary}>
-          {t('pv.locations.empty')}
-        </Text>
-      )}
+      {locations.length === 0 && <Text variant={TextVariants.small}>{t('pv.locations.empty')}</Text>}
 
       {locations.map((location, index) => (
         <LocationCard
@@ -237,20 +233,16 @@ function LocationCard({ location, busy, canMoveUp, canMoveDown, onMove, run }: L
       {(location.connectUrl && location.status === 'notMounted') || canRelocate ? (
         <div className="flex flex-wrap gap-2">
           {location.connectUrl && location.status === 'notMounted' && (
-            <Button
-              className="bg-surface"
-              disabled={busy}
-              onClick={() => void run(() => pvApi.locations.connect(location.id))}
-            >
+            <SecondaryButton disabled={busy} onClick={() => void run(() => pvApi.locations.connect(location.id))}>
               <Link size={16} />
               {t('pv.locations.connect')}
-            </Button>
+            </SecondaryButton>
           )}
           {canRelocate && (
-            <Button className="bg-surface" disabled={busy} onClick={() => void findRelocation()}>
+            <SecondaryButton disabled={busy} onClick={() => void findRelocation()}>
               <FolderInput size={16} />
               {t('pv.locations.relocate')}
-            </Button>
+            </SecondaryButton>
           )}
         </div>
       ) : null}
@@ -272,9 +264,9 @@ function LocationCard({ location, busy, canMoveUp, canMoveDown, onMove, run }: L
               </div>
             ))
           )}
-          <Button className="bg-surface" disabled={busy} onClick={() => void chooseRelocation()}>
+          <SecondaryButton disabled={busy} onClick={() => void chooseRelocation()}>
             {t('pv.locations.chooseFolder')}
-          </Button>
+          </SecondaryButton>
         </div>
       )}
 
@@ -322,23 +314,21 @@ function LocationCard({ location, busy, canMoveUp, canMoveDown, onMove, run }: L
           <div className="flex items-center gap-2">
             {confirmRemove ? (
               <>
-                <Button
-                  className="bg-red-600"
+                <SecondaryButton
+                  danger
                   disabled={busy}
                   onClick={() => void run(() => pvApi.locations.remove(location.id))}
                 >
                   <Trash2 size={16} />
                   {t('pv.locations.confirmRemove')}
-                </Button>
-                <Button className="bg-surface" onClick={() => setConfirmRemove(false)}>
-                  {t('pv.locations.cancel')}
-                </Button>
+                </SecondaryButton>
+                <SecondaryButton onClick={() => setConfirmRemove(false)}>{t('pv.locations.cancel')}</SecondaryButton>
               </>
             ) : (
-              <Button className="bg-surface" disabled={busy} onClick={() => setConfirmRemove(true)}>
+              <SecondaryButton disabled={busy} onClick={() => setConfirmRemove(true)}>
                 <Trash2 size={16} />
                 {t('pv.locations.remove')}
-              </Button>
+              </SecondaryButton>
             )}
           </div>
           <Text variant={TextVariants.small}>{t('pv.locations.removeDesc')}</Text>
@@ -367,6 +357,36 @@ function IconButton({
       disabled={disabled}
       onClick={onClick}
       className="rounded-md p-1.5 text-text-secondary hover:bg-surface hover:text-text-primary disabled:opacity-40 disabled:hover:bg-transparent"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Upstream's Button always uses the dark "on accent" text color, unreadable on dark surfaces. */
+function SecondaryButton({
+  children,
+  danger,
+  disabled,
+  onClick,
+}: {
+  children: React.ReactNode;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick(): void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={clsx(
+        'flex items-center justify-center gap-2 rounded-md px-4 py-2 text-md font-semibold',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        danger
+          ? 'bg-red-600 text-white hover:bg-red-500'
+          : 'border border-border-color text-text-primary hover:bg-bg-secondary',
+      )}
     >
       {children}
     </button>
