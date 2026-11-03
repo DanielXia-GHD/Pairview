@@ -130,6 +130,15 @@ fn attach_sidecars(files: &[FileRef], photos: &mut [PlannedPhoto]) {
             .map(|f| f.name.to_lowercase())
     };
     for sidecar in files.iter().filter(|f| f.kind == Kind::Sidecar) {
+        // RapidRAW virtual copies: `DSC0001.ARW.0a1b2c.rrdata` belongs to `DSC0001.ARW`.
+        let file_key = if sidecar.ext == "rrdata" {
+            crate::file_management::parse_sidecar_name(&sidecar.name)
+                .map_or(sidecar.stem_key.clone(), |(source, _)| {
+                    source.to_lowercase()
+                })
+        } else {
+            sidecar.stem_key.clone()
+        };
         let owner = photos
             .iter()
             .position(|p| {
@@ -137,7 +146,7 @@ fn attach_sidecars(files: &[FileRef], photos: &mut [PlannedPhoto]) {
                     .into_iter()
                     .chain(p.extras.iter().copied().map(Some))
                     .flatten()
-                    .any(|id| name_of(id).as_deref() == Some(sidecar.stem_key.as_str()))
+                    .any(|id| name_of(id).as_deref() == Some(file_key.as_str()))
             })
             .or_else(|| {
                 // A bare-stem XMP describes the whole Photo; with a guard split it goes with
@@ -229,10 +238,13 @@ mod tests {
                 "DSC0001.HIF",
                 "DSC0001.ARW.rrdata",
                 "DSC0001.HIF.rrdata",
+                "DSC0001.ARW.0a1b2c.rrdata",
                 "DSC0001.xmp",
                 "DSC0009.xmp",
             ]),
-            ["DSC0001.ARW DSC0001.HIF +DSC0001.ARW.rrdata +DSC0001.HIF.rrdata +DSC0001.xmp"]
+            [
+                "DSC0001.ARW DSC0001.HIF +DSC0001.ARW.rrdata +DSC0001.HIF.rrdata +DSC0001.ARW.0a1b2c.rrdata +DSC0001.xmp"
+            ]
         );
     }
 

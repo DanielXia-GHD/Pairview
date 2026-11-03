@@ -760,6 +760,27 @@ fn collect_image_files<E: Send>(
     result_list
 }
 
+// PV: list Pairview Photos (given paths + their sidecars) the same way a folder listing does.
+pub(crate) fn image_files_for_paths(
+    entries: Vec<(PathBuf, u64)>,
+    sidecars_by_path: HashMap<PathBuf, Vec<Option<String>>>,
+    app_handle: &AppHandle,
+) -> Vec<ImageFile> {
+    collect_image_files(
+        entries,
+        |(path, modified)| ListedImage {
+            file_name: path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            path,
+            modified,
+        },
+        sidecars_by_path,
+        app_handle,
+    )
+}
+
 #[tauri::command]
 pub async fn list_images_in_dir(
     path: String,

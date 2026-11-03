@@ -59,6 +59,9 @@
       "confirmRemove": "Remove from Pairview",
       "cancel": "Cancel",
       "removeDesc": "Pairview forgets this location and its cached thumbnails and data. Your photos and sidecar files stay where they are."
+    },
+    "tree": {
+      "title": "Library"
     }
   }
 }

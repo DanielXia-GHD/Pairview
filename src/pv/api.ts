@@ -1,6 +1,7 @@
 // Pairview: typed bindings for the backend commands in src-tauri/src/pv/commands.rs.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { ImageFile } from '../components/ui/AppProperties';
 
 // ---- Types (mirror the Rust structs, camelCase) ----
 
@@ -178,6 +179,20 @@ export const pvApi = {
   /** Writes XMP + RapidRAW sidecars; each Photo succeeds or fails on its own. */
   setMetadata: (photoIds: number[], change: MetaChange) => invoke<SetResult[]>('pv_set_metadata', { photoIds, change }),
 };
+
+/**
+ * The Photos of a folder as upstream ImageFiles (one per Photo), or null when the folder isn't in
+ * a scanned Pairview location (or the backend isn't ready): the caller then lists the disk.
+ */
+export async function pvImagesForPath(path: string | null, recursive: boolean): Promise<ImageFile[] | null> {
+  if (!path) return null;
+  try {
+    return await invoke<ImageFile[] | null>('pv_list_images_for_path', { path, recursive });
+  } catch (e) {
+    console.warn('Pairview listing failed, falling back to the folder listing:', e);
+    return null;
+  }
+}
 
 export const FOLDER_CHANGED_EVENT = 'pv://folder-changed';
 

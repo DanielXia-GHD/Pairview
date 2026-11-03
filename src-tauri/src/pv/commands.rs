@@ -332,6 +332,51 @@ pub fn pv_photo_detail(
         .map_err(err)
 }
 
+/// The Photos of a folder as upstream `ImageFile`s (one per Photo: its representative file), so
+/// RapidRAW's grid, thumbnails and editor work on Photos. `None` when the folder isn't in a
+/// scanned location (or is a format sub-folder): the caller lists the disk as before.
+#[tauri::command(async)]
+pub fn pv_list_images_for_path(
+    app: AppHandle,
+    state: State<PvState>,
+    path: String,
+    recursive: bool,
+) -> Result<Option<Vec<crate::file_management::ImageFile>>, String> {
+    (|| {
+        let listing = state.read(|cat| {
+            let Some((folder_id, false)) = queries::folder_at_path(cat, Path::new(&path))? else {
+                return Ok(None);
+            };
+            let scope = Scope::Folder {
+                folder_id,
+                recursive,
+            };
+            let mut entries = Vec::new();
+            let mut sidecars = HashMap::new();
+            for item in queries::list_photos(cat, &scope, &Sort::default(), &Filter::default())? {
+                let Some(file) = item.representative_path.or(item.display_path) else {
+                    continue;
+                };
+                let name = file
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let copies = queries::rrdata_copies(cat, item.id, &name)?;
+                if !copies.is_empty() {
+                    sidecars.insert(file.clone(), copies);
+                }
+                entries.push((file, (item.modified / 1000).max(0) as u64));
+            }
+            Ok(Some((entries, sidecars)))
+        })?;
+        // Reading RapidRAW's sidecars happens outside the catalog lock.
+        Ok(listing.map(|(entries, sidecars)| {
+            crate::file_management::image_files_for_paths(entries, sidecars, &app)
+        }))
+    })()
+    .map_err(err)
+}
+
 // ---- Metadata ---------------------------------------------------------------------------------
 
 /// From the frontend: fields left out are not changed; `label: ""` clears the label.

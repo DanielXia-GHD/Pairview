@@ -131,6 +131,8 @@ pub struct PhotoItem {
     pub guard_mismatch: bool,
     /// Bytes of all member files.
     pub size: i64,
+    /// mtime of the representative file, Unix ms.
+    pub modified: i64,
     pub camera: Option<String>,
     pub lens: Option<String>,
     #[serde(flatten)]
@@ -247,7 +249,7 @@ pub fn list_photos(
                 COALESCE(md.keep_raw, 'auto'),
                 (SELECT COALESCE(SUM(f.size), 0) FROM photo_members m JOIN files f ON f.id = m.file_id
                  WHERE m.photo_id = p.id AND m.role != 'sidecar') AS size,
-                e.model, e.lens
+                e.model, e.lens, COALESCE(rf.mtime, df.mtime, 0)
          FROM photos p
          JOIN folders s ON s.id = p.shoot_folder_id
          JOIN locations l ON l.id = s.location_id
@@ -299,12 +301,61 @@ pub fn list_photos(
                 keep_raw: metadata::KeepRaw::parse(&r.get::<_, String>(16)?).unwrap_or_default(),
             },
             size: r.get(17)?,
+            modified: r.get(20)?,
             camera: r.get(18)?,
             lens: r.get(19)?,
             state,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+// ---- Paths ------------------------------------------------------------------------------------
+
+/// The catalog folder at an absolute path, if it's inside a location and has been scanned.
+/// Returns (folder id, is a format sub-folder).
+pub fn folder_at_path(cat: &Catalog, path: &std::path::Path) -> Result<Option<(i64, bool)>> {
+    for location in crate::pv::locations::list(cat)? {
+        let Ok(rel) = path.strip_prefix(&location.path) else {
+            continue;
+        };
+        let rel: Vec<String> = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect();
+        let found = cat
+            .conn()
+            .query_row(
+                "SELECT id, format_subdir FROM folders WHERE location_id = ?1 AND rel_path = ?2",
+                (location.id, rel.join("/")),
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .ok();
+        if found.is_some() {
+            return Ok(found);
+        }
+    }
+    Ok(None)
+}
+
+/// RapidRAW sidecars of a Photo's representative file, as upstream's listing expects them:
+/// `None` for `NAME.rrdata`, `Some(id)` for each virtual copy `NAME.<id>.rrdata`.
+pub fn rrdata_copies(cat: &Catalog, photo_id: i64, file_name: &str) -> Result<Vec<Option<String>>> {
+    let mut stmt = cat.conn().prepare_cached(
+        "SELECT f.name FROM photo_members m JOIN files f ON f.id = m.file_id
+         WHERE m.photo_id = ?1 AND m.role = 'sidecar' AND f.ext = 'rrdata'",
+    )?;
+    let names: Vec<String> = stmt
+        .query_map([photo_id], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut copies: Vec<Option<String>> = names
+        .iter()
+        .filter_map(|n| crate::file_management::parse_sidecar_name(n))
+        .filter(|(source, _)| *source == file_name)
+        .map(|(_, id)| id.map(str::to_string))
+        .collect();
+    copies.sort();
+    Ok(copies)
 }
 
 // ---- Dates ------------------------------------------------------------------------------------
@@ -684,6 +735,63 @@ mod tests {
     }
 
     #[test]
+    fn folders_by_path_and_rrdata_copies() {
+        let (tmp, cat, _) = fixture();
+        let root = tmp.path().join("DCIM").canonicalize().unwrap();
+        let shoot = folder_at_path(&cat, &root.join("2026-10-24_10361024")).unwrap();
+        assert_eq!(shoot, Some((folder(&cat, "2026-10-24_10361024"), false)));
+        assert_eq!(
+            folder_at_path(&cat, &root.join("2026-10-24_10361024/arw"))
+                .unwrap()
+                .map(|f| f.1),
+            Some(true)
+        );
+        assert_eq!(
+            folder_at_path(&cat, &root).unwrap().map(|f| f.0),
+            Some(folder(&cat, ""))
+        );
+        assert_eq!(folder_at_path(&cat, &root.join("nope")).unwrap(), None);
+        assert_eq!(
+            folder_at_path(&cat, std::path::Path::new("/elsewhere")).unwrap(),
+            None
+        );
+
+        // Sidecars, including a virtual copy, become upstream's copy list.
+        let dir = root.join("10561031");
+        for name in [
+            "DSC03601.ARW.rrdata",
+            "DSC03601.ARW.0a1b2c.rrdata",
+            "DSC03601.xmp",
+        ] {
+            fs::write(dir.join(name), b"{}").unwrap();
+        }
+        let mut cat = cat;
+        let loc = locations::list(&cat).unwrap().remove(0);
+        let scan = scan_location(
+            &mut cat,
+            &loc,
+            &ScanOptions {
+                full: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assets::refresh(&mut cat, &scan.changed_folders).unwrap();
+        let photo: i64 = cat
+            .conn()
+            .query_row(
+                "SELECT id FROM photos WHERE stem_key = 'dsc03601'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            rrdata_copies(&cat, photo, "DSC03601.ARW").unwrap(),
+            [None, Some("0a1b2c".to_string())]
+        );
+    }
+
+    #[test]
     fn detail_lists_files() {
         let (_tmp, cat, _) = fixture();
         let id: i64 = cat
@@ -739,6 +847,7 @@ mod tests {
             date_uncertain: false,
             guard_mismatch: false,
             size: 0,
+            modified: 0,
             camera: None,
             lens: None,
             meta: PhotoMeta::default(),

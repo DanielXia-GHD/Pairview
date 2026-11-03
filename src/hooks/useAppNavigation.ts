@@ -15,6 +15,7 @@ import { debouncedSave, debouncedSetHistory } from './useEditorActions';
 import { clearLibrarySelection } from './useLibraryActions';
 import { computeSortedLibrary } from './useSortedLibrary';
 import { getImmichAlbumImages, isImmichAlbumId } from '../components/immich/immichApi';
+import { pvImagesForPath } from '../pv/api'; // PV
 
 export interface AppNavigationProps {
   clearThumbnailQueue: () => void;
@@ -424,7 +425,10 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
         if (preloadedImages) {
           files = preloadedImages;
         } else {
-          files = await invoke(command, { path });
+          // PV: folders in a Pairview location list Photos (one entry per RAW+HIF pair).
+          files =
+            (await pvImagesForPath(path, libraryViewMode === LibraryViewMode.Recursive)) ??
+            (await invoke(command, { path }));
           if (useLibraryStore.getState().currentFolderPath !== path) return;
         }
 
