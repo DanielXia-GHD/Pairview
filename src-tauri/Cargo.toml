@@ -102,7 +102,7 @@ objc2-foundation = { version = "0.3.2", features = [
     "NSValue",
     "NSArray",
 ] }
-objc2-core-foundation = { version = "0.3.2", features = ["CFArray", "CFCGTypes", "CFData", "CFDictionary", "CFNumber", "CFString"] } # PV: CF types for heif.rs, exif_read.rs
+objc2-core-foundation = { version = "0.3.2", features = ["CFCGTypes", "CFData", "CFDictionary", "CFNumber", "CFString"] } # PV: CF types for heif.rs, exif_read.rs
 objc2-core-graphics = { version = "0.3.2", features = ["CGColorSpace", "CGContext", "CGBitmapContext", "CGImage"] } # PV: bitmap drawing for heif.rs
 objc2-image-io = { version = "0.3.2", features = ["CGImageSource", "CGImageDestination", "CGImageProperties", "objc2-core-graphics"] } # PV: ImageIO HEIF decode
 objc2-core-image = { version = "0.3.2", features = [
