@@ -387,6 +387,46 @@ pub fn dates(cat: &Catalog, location_id: Option<i64>) -> Result<Vec<DayCount>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+/// Prefix of the virtual library paths for the date view: `Dates: 2026`, `Dates: 2026-10`,
+/// `Dates: 2026-10-31` (like upstream's `Album: …` paths).
+pub const DATES_PREFIX: &str = "Dates: ";
+
+/// The date range a `Dates: …` path stands for.
+pub fn date_scope(path: &str) -> Option<Scope> {
+    use chrono::{Datelike, NaiveDate};
+    let spec = path.strip_prefix(DATES_PREFIX)?.trim();
+    let parts: Vec<&str> = spec.split('-').collect();
+    let num = |i: usize| parts.get(i)?.parse::<u32>().ok();
+    let (from, to) = match parts.len() {
+        1 => {
+            let year = num(0)? as i32;
+            (
+                NaiveDate::from_ymd_opt(year, 1, 1)?,
+                NaiveDate::from_ymd_opt(year, 12, 31)?,
+            )
+        }
+        2 => {
+            let first = NaiveDate::from_ymd_opt(num(0)? as i32, num(1)?, 1)?;
+            let next = if first.month() == 12 {
+                NaiveDate::from_ymd_opt(first.year() + 1, 1, 1)?
+            } else {
+                NaiveDate::from_ymd_opt(first.year(), first.month() + 1, 1)?
+            };
+            (first, next.pred_opt()?)
+        }
+        3 => {
+            let day = NaiveDate::from_ymd_opt(num(0)? as i32, num(1)?, num(2)?)?;
+            (day, day)
+        }
+        _ => return None,
+    };
+    Some(Scope::Dates {
+        from: from.format("%Y-%m-%d").to_string(),
+        to: to.format("%Y-%m-%d").to_string(),
+        location_id: None,
+    })
+}
+
 // ---- Photo detail -----------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -788,6 +828,57 @@ mod tests {
         assert_eq!(
             rrdata_copies(&cat, photo, "DSC03601.ARW").unwrap(),
             [None, Some("0a1b2c".to_string())]
+        );
+    }
+
+    #[test]
+    fn date_paths() {
+        let range = |p: &str| match date_scope(p) {
+            Some(Scope::Dates { from, to, .. }) => Some((from, to)),
+            _ => None,
+        };
+        assert_eq!(
+            range("Dates: 2026"),
+            Some(("2026-01-01".into(), "2026-12-31".into()))
+        );
+        assert_eq!(
+            range("Dates: 2026-02"),
+            Some(("2026-02-01".into(), "2026-02-28".into()))
+        );
+        assert_eq!(
+            range("Dates: 2028-02"),
+            Some(("2028-02-01".into(), "2028-02-29".into()))
+        );
+        assert_eq!(
+            range("Dates: 2026-12"),
+            Some(("2026-12-01".into(), "2026-12-31".into()))
+        );
+        assert_eq!(
+            range("Dates: 2026-10-31"),
+            Some(("2026-10-31".into(), "2026-10-31".into()))
+        );
+        for bad in [
+            "2026",
+            "Dates: ",
+            "Dates: 2026-13",
+            "Dates: 2026-02-30",
+            "Dates: x",
+            "Album: 2026",
+        ] {
+            assert_eq!(range(bad), None, "{bad}");
+        }
+        // Month scope picks up the right Photos.
+        let (_tmp, cat, _) = fixture();
+        let items = list_photos(
+            &cat,
+            &date_scope("Dates: 2026-10").unwrap(),
+            &Sort::default(),
+            &Filter::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            stems(&items),
+            ["dsc03545", "dsc03546", "dsc03600", "dsc03601"]
         );
     }
 

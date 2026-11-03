@@ -18,6 +18,7 @@ import Text from '../../ui/Text';
 import { TextColors, TextVariants, TextWeights, TEXT_COLOR_KEYS } from '../../../types/typography';
 import { useProcessStore } from '../../../store/useProcessStore';
 import { useSettingsStore } from '../../../store/useSettingsStore';
+import { groupImagesByDay, isPvDatesPath } from '../../../pv/dates'; // PV
 
 function ListHeader({ widths, setWidths, containerRef, sortCriteria, onSortChange }: any) {
   const { t } = useTranslation();
@@ -441,8 +442,10 @@ export default function LibraryGrid(props: any) {
     const rows: any[] = [];
     const isJustified = thumbnailAspectRatio === ThumbnailAspectRatio.Justified && !isListView;
 
-    if (libraryViewMode === LibraryViewMode.Recursive) {
-      const groups = groupImagesByFolder(imageList, currentFolderPath);
+    // PV: the date view groups by capture day.
+    const pvDates = isPvDatesPath(currentFolderPath);
+    if (libraryViewMode === LibraryViewMode.Recursive || pvDates) {
+      const groups = pvDates ? groupImagesByDay(imageList) : groupImagesByFolder(imageList, currentFolderPath);
       groups.forEach((group) => {
         if (group.images.length === 0) return;
 

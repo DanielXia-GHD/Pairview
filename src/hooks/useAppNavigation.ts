@@ -16,6 +16,7 @@ import { clearLibrarySelection } from './useLibraryActions';
 import { computeSortedLibrary } from './useSortedLibrary';
 import { getImmichAlbumImages, isImmichAlbumId } from '../components/immich/immichApi';
 import { pvImagesForPath } from '../pv/api'; // PV
+import { isPvDatesPath } from '../pv/dates'; // PV
 
 export interface AppNavigationProps {
   clearThumbnailQueue: () => void;
@@ -442,7 +443,8 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
 
         await loadExifForImages(files, path, sortCriteria.key, setLibrary);
 
-        if (!preserveEditor) {
+        // PV: `Dates: …` paths aren't folders.
+        if (!preserveEditor && !isPvDatesPath(path)) {
           invoke(Invokes.StartBackgroundIndexing, { folderPath: path }).catch((err) => {
             console.error('Failed to start background indexing:', err);
           });

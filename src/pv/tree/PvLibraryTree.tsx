@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, Folder, FolderOpen, HardDrive, Server } from
 import Text from '../../components/ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { onFolderChanged, pvApi, type FolderNode, type LocationInfo } from '../api';
+import PvDatesTree from './PvDatesTree';
 
 interface PvLibraryTreeProps {
   onFolderSelect(path: string): void;
@@ -86,32 +87,35 @@ export default function PvLibraryTree({ onFolderSelect, selectedPath }: PvLibrar
   if (locations.length === 0) return null;
 
   return (
-    <div className="pb-2">
-      <div
-        className="flex items-center w-full px-1 py-1.5 cursor-pointer rounded-md hover:bg-surface/30 transition-colors"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <Text as="div" variant={TextVariants.small} weight={TextWeights.bold} className="flex items-center min-w-0">
-          <div className="p-0.5">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</div>
-          <span className="ml-1 uppercase tracking-wider select-none truncate">{t('pv.tree.title')}</span>
-        </Text>
-      </div>
-      {open && (
-        <div className="pt-1">
-          {locations.map((location) => (
-            <LocationRoot
-              key={location.id}
-              location={location}
-              tree={trees[location.id] ?? null}
-              expanded={expanded}
-              onToggle={toggle}
-              onFolderSelect={onFolderSelect}
-              selectedPath={selectedPath}
-            />
-          ))}
+    <>
+      <div className="pb-2">
+        <div
+          className="flex items-center w-full px-1 py-1.5 cursor-pointer rounded-md hover:bg-surface/30 transition-colors"
+          onClick={() => setOpen((o) => !o)}
+        >
+          <Text as="div" variant={TextVariants.small} weight={TextWeights.bold} className="flex items-center min-w-0">
+            <div className="p-0.5">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</div>
+            <span className="ml-1 uppercase tracking-wider select-none truncate">{t('pv.tree.title')}</span>
+          </Text>
         </div>
-      )}
-    </div>
+        {open && (
+          <div className="pt-1">
+            {locations.map((location) => (
+              <LocationRoot
+                key={location.id}
+                location={location}
+                tree={trees[location.id] ?? null}
+                expanded={expanded}
+                onToggle={toggle}
+                onFolderSelect={onFolderSelect}
+                selectedPath={selectedPath}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <PvDatesTree onSelect={onFolderSelect} selectedPath={selectedPath} />
+    </>
   );
 }
 

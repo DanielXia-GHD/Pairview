@@ -341,8 +341,9 @@ pub struct FolderListing {
     pub photos: Vec<PhotoItem>,
 }
 
-/// A folder's Photos for the library grid. `None` when the folder isn't in a scanned location (or
-/// is a format sub-folder): the caller lists the disk as before.
+/// A folder's Photos for the library grid, or a date range's for a `Dates: …` path. `None` when
+/// the folder isn't in a scanned location (or is a format sub-folder): the caller lists the disk
+/// as before.
 #[tauri::command(async)]
 pub fn pv_list_images_for_path(
     app: AppHandle,
@@ -352,12 +353,20 @@ pub fn pv_list_images_for_path(
 ) -> Result<Option<FolderListing>, String> {
     (|| {
         let listing = state.read(|cat| {
-            let Some((folder_id, false)) = queries::folder_at_path(cat, Path::new(&path))? else {
-                return Ok(None);
-            };
-            let scope = Scope::Folder {
-                folder_id,
-                recursive,
+            let scope = if path.starts_with(queries::DATES_PREFIX) {
+                match queries::date_scope(&path) {
+                    Some(scope) => scope,
+                    None => return Ok(Some((Vec::new(), HashMap::new(), Vec::new()))),
+                }
+            } else {
+                let Some((folder_id, false)) = queries::folder_at_path(cat, Path::new(&path))?
+                else {
+                    return Ok(None);
+                };
+                Scope::Folder {
+                    folder_id,
+                    recursive,
+                }
             };
             let mut entries = Vec::new();
             let mut sidecars = HashMap::new();

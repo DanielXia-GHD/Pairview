@@ -94,6 +94,13 @@
           "drop": "Drop"
         }
       }
+    },
+    "dates": {
+      "title": "Dates",
+      "jump": "Jump to date",
+      "undated": "No date",
+      "uncertain_one": "{{count}} photo's date may be wrong",
+      "uncertain_other": "{{count}} photos' dates may be wrong"
     }
   }
 }
