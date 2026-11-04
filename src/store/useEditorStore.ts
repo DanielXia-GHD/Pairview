@@ -64,7 +64,7 @@ interface EditorState {
   // Interaction State
   isSliderDragging: boolean;
   speedEditTarget: RefObject<SpeedEditTarget | null> | null;
-  isSpeedEditHeld: boolean;
+  isSpeedEditActive: boolean;
   zoom: number;
   displaySize: ImageDimensions;
   previewSize: ImageDimensions;
@@ -149,7 +149,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   isSliderDragging: false,
   speedEditTarget: null,
-  isSpeedEditHeld: false,
+  isSpeedEditActive: false,
   interactivePatch: null,
   activeMaskContainerId: null,
   activeMaskId: null,
@@ -178,7 +178,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   copiedSectionAdjustments: null,
   copiedMask: null,
-  brushSettings: { size: 50, feather: 50, tool: ToolType.Brush },
+  brushSettings: { size: 100, feather: 50, tool: ToolType.Brush },
   copiedAdjustments: null,
 
   isGeneratingAiMask: false,

@@ -35,6 +35,7 @@ mod baseline_exposure;
 mod bm3d;
 mod cache_utils;
 mod camera_tethering;
+mod clone_heal;
 mod culling;
 mod edit_in;
 mod effect_maps;
@@ -59,6 +60,7 @@ mod lens_correction;
 mod lut_processing;
 mod mask_generation;
 mod memory_budget;
+mod motion_blur;
 mod multi_exposure;
 mod negative_conversion;
 mod panorama_stitching;
@@ -71,7 +73,11 @@ mod relight;
 mod storage;
 mod tagging;
 mod tagging_utils;
+mod tiff_metadata;
+mod touch_up;
 mod viewer_window;
+#[cfg(target_os = "linux")]
+mod wayland_subsurface;
 mod white_balance;
 mod window_customizer;
 
@@ -241,11 +247,11 @@ pub fn generate_transformed_preview(
     Ok((preview, scale_for_gpu, unscaled_crop_offset))
 }
 
-fn get_or_compute_stage(
-    cache: &Mutex<Option<(u64, Arc<DynamicImage>)>>,
+fn get_or_compute_stage<T>(
+    cache: &Mutex<Option<(u64, Arc<T>)>>,
     key: u64,
-    compute: impl FnOnce() -> Result<Arc<DynamicImage>, String>,
-) -> Result<Arc<DynamicImage>, String> {
+    compute: impl FnOnce() -> Result<Arc<T>, String>,
+) -> Result<Arc<T>, String> {
     let mut cache_lock = cache.lock().unwrap_or_else(|e| e.into_inner());
 
     if let Some((hash, img)) = cache_lock.as_ref()
@@ -622,6 +628,7 @@ struct EditorRender {
     masks: mask_generation::GeneratedMasks,
     mask_cache_key: u64,
     lut: Option<Arc<lut_processing::Lut>>,
+    motion_blur: motion_blur::MotionBlurs,
 }
 
 impl EditorRender {
@@ -640,6 +647,10 @@ impl EditorRender {
             .get("masks")
             .and_then(|m| serde_json::from_value(m.clone()).ok())
             .unwrap_or_default();
+        let crop_offset = (
+            unscaled_crop_offset.0 * scale,
+            unscaled_crop_offset.1 * scale,
+        );
         let masks = get_cached_or_generate_masks(
             state,
             &loaded_image.path,
@@ -647,12 +658,10 @@ impl EditorRender {
             width,
             height,
             scale,
-            (
-                unscaled_crop_offset.0 * scale,
-                unscaled_crop_offset.1 * scale,
-            ),
+            crop_offset,
             adjustments,
         );
+        let (full_w, full_h) = loaded_image.image.dimensions();
         Self {
             adjustments: get_all_adjustments_from_json(
                 adjustments,
@@ -665,6 +674,12 @@ impl EditorRender {
             lut: adjustments["lutPath"]
                 .as_str()
                 .and_then(|p| lut_processing::get_or_load_lut(state, p).ok()),
+            motion_blur: motion_blur::MotionBlurs::new(
+                adjustments,
+                (width, height),
+                crop_offset,
+                full_w.max(full_h) as f32 * scale,
+            ),
         }
     }
 
@@ -676,6 +691,7 @@ impl EditorRender {
             lut: self.lut.clone(),
             roi,
             hsl_probe,
+            motion_blur: self.motion_blur.clone(),
         }
     }
 }
@@ -1428,6 +1444,12 @@ async fn generate_uncropped_preview(
                 lut,
                 roi: None,
                 hsl_probe: false,
+                motion_blur: crate::motion_blur::MotionBlurs::new(
+                    &adjustments_clone,
+                    (preview_width, preview_height),
+                    (0.0, 0.0),
+                    preview_width.max(preview_height) as f32,
+                ),
             },
             "generate_uncropped_preview",
         ) {
@@ -1542,6 +1564,13 @@ async fn generate_preset_preview(
                 lut,
                 roi: None,
                 hsl_probe: false,
+                motion_blur: crate::motion_blur::MotionBlurs::new(
+                    &js_adjustments,
+                    (img_w, img_h),
+                    scaled_crop_offset,
+                    loaded_image.image.width().max(loaded_image.image.height()) as f32
+                        * scale_for_gpu,
+                ),
             },
             "generate_preset_preview",
         )?;
@@ -1733,6 +1762,12 @@ async fn generate_all_community_previews(
                             lut,
                             roi: None,
                             hsl_probe: false,
+                            motion_blur: crate::motion_blur::MotionBlurs::new(
+                                &scaled_adjustments,
+                                (img_w, img_h),
+                                actual_scaled_crop_offset,
+                                base_image.width().max(base_image.height()) as f32,
+                            ),
                         },
                         "generate_all_community_previews",
                     )?;
@@ -1901,11 +1936,15 @@ async fn save_hdr(
 
     let output_path = parent_dir.join(output_filename);
 
-    image_to_save
-        .save(&output_path)
-        .map_err(|e| format!("Failed to save hdr image: {}", e))?;
-
     let (real_path, _) = crate::file_management::parse_virtual_path(&first_path_str);
+
+    crate::exif_processing::save_converted_image(
+        &image_to_save,
+        &output_path,
+        &real_path.to_string_lossy(),
+    )
+    .map_err(|e| format!("Failed to save hdr image: {}", e))?;
+
     let _ =
         crate::exif_processing::write_rrexif_sidecar(&real_path.to_string_lossy(), &output_path);
 
@@ -2008,6 +2047,12 @@ async fn generate_preview_for_path(
                 lut,
                 roi: None,
                 hsl_probe: false,
+                motion_blur: crate::motion_blur::MotionBlurs::new(
+                    &js_adjustments,
+                    (img_w, img_h),
+                    unscaled_crop_offset,
+                    base_image.width().max(base_image.height()) as f32,
+                ),
             },
             "generate_preview_for_path",
         )?;
@@ -2781,6 +2826,7 @@ pub fn run() {
             full_warped_build_lock: Mutex::new(()),
             wgpu_presented_generation: AtomicUsize::new(usize::MAX),
             patched_cache: Mutex::new(None),
+            cleanup_source_cache: Mutex::new(None),
             warped_cache: Mutex::new(None),
             working_cache: Mutex::new(None),
             effects_cache: Mutex::new(None),
@@ -2838,6 +2884,7 @@ pub fn run() {
             app_settings::load_settings,
             app_settings::save_settings,
             app_settings::is_tethering_supported,
+            app_settings::is_wgpu_renderer_supported,
             ai_commands::generate_ai_subject_mask,
             ai_commands::precompute_ai_subject_mask,
             ai_commands::generate_ai_foreground_mask,
