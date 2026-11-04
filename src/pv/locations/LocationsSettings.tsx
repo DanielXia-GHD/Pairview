@@ -278,7 +278,7 @@ function LocationCard({ location, busy, canMoveUp, canMoveDown, onMove, run }: L
             </Text>
             <Input
               value={excludes}
-              placeholder="exports, 2019/old"
+              placeholder={t('pv.locations.excludesPlaceholder')}
               bgClassName="bg-bg-primary"
               onChange={(e) => setExcludes(e.target.value)}
               onKeyDown={stopKeys}

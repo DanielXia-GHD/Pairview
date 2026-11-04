@@ -5,7 +5,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import clsx from 'clsx';
-import { ChevronLeft, ChevronRight, Expand, Info, Lock, Minimize, Pause, Pencil, Play, Square, Star, X } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Expand,
+  Info,
+  Lock,
+  Minimize,
+  Pause,
+  Pencil,
+  Play,
+  Square,
+  Star,
+  X,
+} from 'lucide-react';
 import { create } from 'zustand';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useUIStore } from '../../store/useUIStore';

@@ -3,6 +3,7 @@
 // capture EXIF, and every member file with its size: the RAW and its display copy side by side.
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { formatBytes } from '../../utils/formatBytes';
 import { pvApi, type Histogram, type MemberFile, type PhotoDetail, type PhotoItem } from '../api';
 
@@ -28,22 +29,25 @@ export function saveInfoOpen(open: boolean) {
 
 // ---- Formatting ----
 
-export function formatExposure(seconds: number): string {
-  if (seconds >= 1) return `${Number(seconds.toFixed(1))} s`;
-  return `1/${Math.round(1 / seconds)} s`;
+const trim = (n: number, digits = 1) => Number(n.toFixed(digits));
+
+export function formatExposure(t: TFunction, seconds: number): string {
+  if (seconds >= 1) return t('pv.info.units.seconds', { value: trim(seconds) });
+  return t('pv.info.units.fraction', { denominator: Math.round(1 / seconds) });
 }
 
-export function formatAperture(f: number): string {
-  return `f/${Number(f.toFixed(1))}`;
-}
-
-export function formatDimensions(width: number, height: number): string {
+export function formatDimensions(t: TFunction, width: number, height: number): string {
   const mp = (width * height) / 1e6;
-  return `${width} × ${height} · ${mp >= 10 ? Math.round(mp) : mp.toFixed(1)} MP`;
+  return t('pv.info.units.dimensions', { width, height, mp: mp >= 10 ? Math.round(mp) : trim(mp) });
 }
 
-export function formatCoordinate(value: number, positive: string, negative: string): string {
-  return `${Math.abs(value).toFixed(5)}° ${value >= 0 ? positive : negative}`;
+export function formatCoordinates(t: TFunction, lat: number, lon: number): string {
+  const one = (value: number, positive: 'north' | 'east', negative: 'south' | 'west') =>
+    t('pv.info.units.coordinate', {
+      value: Math.abs(value).toFixed(5),
+      direction: t(`pv.info.units.${value >= 0 ? positive : negative}`),
+    });
+  return `${one(lat, 'north', 'south')}, ${one(lon, 'east', 'west')}`;
 }
 
 const fileName = (path: string) => path.split(/[\\/]/).pop() ?? path;
@@ -86,14 +90,14 @@ export default function InfoPanel({ photo }: { photo: PhotoItem }) {
   const total = files.reduce((sum, f) => sum + f.size, 0);
 
   const exposure = [
-    exif?.exposureS ? formatExposure(exif.exposureS) : null,
-    exif?.fNumber ? formatAperture(exif.fNumber) : null,
-    exif?.iso ? `ISO ${exif.iso}` : null,
-    exif?.focalMm ? `${Number(exif.focalMm.toFixed(1))} mm` : null,
+    exif?.exposureS ? formatExposure(t, exif.exposureS) : null,
+    exif?.fNumber ? t('pv.info.units.aperture', { value: trim(exif.fNumber) }) : null,
+    exif?.iso ? t('pv.info.units.iso', { value: exif.iso }) : null,
+    exif?.focalMm ? t('pv.info.units.focal', { value: trim(exif.focalMm) }) : null,
   ].filter(Boolean);
   const camera = [exif?.make, exif?.model].filter(Boolean).join(' ') || photo.camera;
   const captured = exif?.dateOriginal
-    ? `${exif.dateOriginal.replace('T', ' ')}${exif.offsetOriginal ? ` (UTC${exif.offsetOriginal})` : ''}`
+    ? `${exif.dateOriginal.replace('T', ' ')}${exif.offsetOriginal ? ` ${t('pv.info.units.utc', { offset: exif.offsetOriginal })}` : ''}`
     : photo.capturedAt?.replace('T', ' ').slice(0, 19);
 
   return (
@@ -108,7 +112,7 @@ export default function InfoPanel({ photo }: { photo: PhotoItem }) {
           <HistogramChart data={histogram} />
         ) : (
           <div className="flex h-full items-center justify-center text-white/40">
-            {histogramFailed ? t('pv.info.noHistogram') : '…'}
+            {histogramFailed ? t('pv.info.noHistogram') : t('pv.info.loading')}
           </div>
         )}
       </div>
@@ -124,12 +128,10 @@ export default function InfoPanel({ photo }: { photo: PhotoItem }) {
         {(exif?.lens ?? photo.lens) && <Row label={t('pv.info.lens')}>{exif?.lens ?? photo.lens}</Row>}
         {exposure.length > 0 && <Row label={t('pv.info.exposure')}>{exposure.join(' · ')}</Row>}
         {exif?.width && exif?.height && (
-          <Row label={t('pv.info.dimensions')}>{formatDimensions(exif.width, exif.height)}</Row>
+          <Row label={t('pv.info.dimensions')}>{formatDimensions(t, exif.width, exif.height)}</Row>
         )}
         {exif?.gpsLat != null && exif?.gpsLon != null && (
-          <Row label={t('pv.info.location')}>
-            {formatCoordinate(exif.gpsLat, 'N', 'S')}, {formatCoordinate(exif.gpsLon, 'E', 'W')}
-          </Row>
+          <Row label={t('pv.info.location')}>{formatCoordinates(t, exif.gpsLat, exif.gpsLon)}</Row>
         )}
         {!exif && detail && <div className="text-white/50">{t('pv.info.noExif')}</div>}
       </Section>
