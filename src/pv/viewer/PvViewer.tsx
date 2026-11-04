@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import clsx from 'clsx';
-import { ChevronLeft, ChevronRight, Expand, Lock, Minimize, Pencil, Star, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Expand, Lock, Minimize, Pause, Pencil, Play, Square, Star, X } from 'lucide-react';
 import { create } from 'zustand';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -14,6 +14,7 @@ import type { ImageFile } from '../../components/ui/AppProperties';
 import { pvApi, type ColorLabel, type KeepRaw, type MetaChange, type PhotoItem } from '../api';
 import { basePath, pvPhotoForPath, usePvPhotoStore } from '../store';
 import { badgeLabel } from '../grid/PvTileBadge';
+import { recursivePaths, shuffled, SLIDESHOW_SECONDS, useSlideshowOptions, type SlideshowOptions } from './slideshow';
 
 const PREFETCH_AHEAD = 2;
 const PREFETCH_BEHIND = 1;
@@ -92,10 +93,17 @@ interface OverlayProps {
 function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
   const { t } = useTranslation();
   const byPath = usePvPhotoStore((s) => s.byPath);
-  const paths = useMemo(() => list.map((f) => f.path).filter((p) => byPath[basePath(p)]), [list, byPath]);
+  const gridPaths = useMemo(() => list.map((f) => f.path).filter((p) => byPath[basePath(p)]), [list, byPath]);
+  // A slideshow can step through its own order (shuffled, or including sub-folders).
+  const [order, setOrder] = useState<string[] | null>(null);
+  const paths = order ?? gridPaths;
   const [current, setCurrent] = useState(startPath);
-  const index = Math.max(0, paths.indexOf(current));
-  const photo = byPath[basePath(paths[index] ?? current)];
+  const [show, setShow] = useState<'off' | 'playing' | 'paused'>('off');
+  const [showOptions, setShowOptions] = useSlideshowOptions();
+  const position = paths.indexOf(current);
+  const index = Math.max(0, position);
+  // After a slideshow through sub-folders stops, `current` may not be in the grid's list.
+  const photo = byPath[basePath(position >= 0 ? paths[position] : current)];
 
   const [chrome, setChrome] = useState(true);
   const hideTimer = useRef<number | undefined>(undefined);
@@ -126,6 +134,46 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
     enteredFullscreen.current = next;
     setFullscreen(next);
   }, []);
+
+  /** Starts (or restarts, after an option change) the slideshow from the current Photo. */
+  const startSlideshow = useCallback(
+    async (options: SlideshowOptions) => {
+      let base = gridPaths;
+      if (options.subfolders) {
+        try {
+          base = (await recursivePaths()) ?? gridPaths;
+        } catch {
+          base = gridPaths;
+        }
+      }
+      const ordered = options.shuffle ? shuffled(base, current) : base;
+      setOrder(ordered);
+      if (!ordered.includes(current) && ordered.length > 0) setCurrent(ordered[0]);
+      setShow('playing');
+    },
+    [gridPaths, current],
+  );
+
+  const stopSlideshow = useCallback(() => {
+    setShow('off');
+    setOrder(null);
+  }, []);
+
+  const changeShowOptions = (patch: Partial<SlideshowOptions>) => {
+    setShowOptions(patch);
+    if ('shuffle' in patch || 'subfolders' in patch) void startSlideshow({ ...showOptions, ...patch });
+  };
+
+  // Advance while playing; at the end, loop or stop.
+  useEffect(() => {
+    if (show !== 'playing') return;
+    const timer = window.setTimeout(() => {
+      if (index < paths.length - 1) setCurrent(paths[index + 1]);
+      else if (showOptions.loop && paths.length > 0) setCurrent(paths[0]);
+      else setShow('paused');
+    }, showOptions.seconds * 1000);
+    return () => window.clearTimeout(timer);
+  }, [show, index, paths, showOptions.loop, showOptions.seconds]);
 
   const showChrome = useCallback(() => {
     setChrome(true);
@@ -192,6 +240,9 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
       else if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp') go(-1);
       else if (key === 'Home') setCurrent(paths[0] ?? current);
       else if (key === 'End') setCurrent(paths[paths.length - 1] ?? current);
+      else if (key === 'Enter') void (show === 'off' ? startSlideshow(showOptions) : stopSlideshow());
+      else if (key === ' ' && show !== 'off') setShow(show === 'playing' ? 'paused' : 'playing');
+      else if (key === 'Escape' && show !== 'off') stopSlideshow();
       else if (key === 'Escape' || key === ' ') close();
       else if (key === 'f' || key === 'F') void toggleFullscreen();
       else if (key === 'e' || key === 'E') {
@@ -216,7 +267,21 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [apply, close, current, go, onOpenEditor, paths, photo, showChrome, toggleFullscreen]);
+  }, [
+    apply,
+    close,
+    current,
+    go,
+    onOpenEditor,
+    paths,
+    photo,
+    show,
+    showChrome,
+    showOptions,
+    startSlideshow,
+    stopSlideshow,
+    toggleFullscreen,
+  ]);
 
   // Prefetch neighbours so ←/→ is instant.
   useEffect(() => {
@@ -247,7 +312,13 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
       role="dialog"
       aria-label={t('pv.viewer.title')}
     >
-      <ZoomableImage key={photo.id} photo={photo} apiRef={zoomRef} onSwipe={go} />
+      <ZoomableImage
+        key={photo.id}
+        photo={photo}
+        apiRef={zoomRef}
+        onSwipe={go}
+        fade={show !== 'off' && showOptions.fade}
+      />
 
       {/* Top bar */}
       <div
@@ -278,6 +349,12 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
           }}
         >
           <Pencil size={16} />
+        </ChromeButton>
+        <ChromeButton
+          title={show === 'off' ? t('pv.slideshow.start') : t('pv.slideshow.stop')}
+          onClick={() => void (show === 'off' ? startSlideshow(showOptions) : stopSlideshow())}
+        >
+          {show === 'off' ? <Play size={16} /> : <Square size={14} />}
         </ChromeButton>
         <ChromeButton title={t('pv.viewer.fullscreen')} onClick={() => void toggleFullscreen()}>
           {fullscreen ? <Minimize size={16} /> : <Expand size={16} />}
@@ -314,6 +391,18 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
         <span className="absolute right-4 text-[11px] text-white/50">{t('pv.viewer.keysHint')}</span>
       </div>
 
+      {show !== 'off' && (
+        <SlideshowBar
+          visible={chrome}
+          playing={show === 'playing'}
+          options={showOptions}
+          onToggle={() => setShow(show === 'playing' ? 'paused' : 'playing')}
+          onStop={stopSlideshow}
+          onChange={changeShowOptions}
+          onHover={() => window.clearTimeout(hideTimer.current)}
+        />
+      )}
+
       {/* Side arrows */}
       {index > 0 && <SideArrow side="left" visible={chrome} onClick={() => go(-1)} title={t('pv.viewer.previous')} />}
       {index < paths.length - 1 && (
@@ -335,10 +424,12 @@ interface ZoomableImageProps {
   photo: PhotoItem;
   apiRef: React.MutableRefObject<ZoomApi | null>;
   onSwipe(by: number): void;
+  /** Fade the image in (slideshow). */
+  fade?: boolean;
 }
 
 /** `scale: null` = fit to the window; otherwise 1 = 100% (one image pixel per screen pixel). */
-function ZoomableImage({ photo, apiRef, onSwipe }: ZoomableImageProps) {
+function ZoomableImage({ photo, apiRef, onSwipe, fade }: ZoomableImageProps) {
   const { t } = useTranslation();
   const box = useRef<HTMLDivElement>(null);
   const [jpeg, setJpeg] = useState(false);
@@ -420,6 +511,10 @@ function ZoomableImage({ photo, apiRef, onSwipe }: ZoomableImageProps) {
         transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px))`,
       }
     : { maxWidth: '100%', maxHeight: '100%', transform: 'translate(-50%, -50%)' };
+  if (fade) {
+    style.opacity = natural ? 1 : 0;
+    style.transition = 'opacity 600ms ease-in-out';
+  }
 
   return (
     <div
@@ -515,5 +610,70 @@ function SideArrow({
     >
       {side === 'left' ? <ChevronLeft size={22} /> : <ChevronRight size={22} />}
     </button>
+  );
+}
+
+function SlideshowBar({
+  visible,
+  playing,
+  options,
+  onToggle,
+  onStop,
+  onChange,
+  onHover,
+}: {
+  visible: boolean;
+  playing: boolean;
+  options: SlideshowOptions;
+  onToggle(): void;
+  onStop(): void;
+  onChange(patch: Partial<SlideshowOptions>): void;
+  onHover(): void;
+}) {
+  const { t } = useTranslation();
+  const toggle = (key: 'fade' | 'shuffle' | 'loop' | 'subfolders') => (
+    <button
+      type="button"
+      onClick={() => onChange({ [key]: !options[key] })}
+      className={clsx(
+        'rounded-full px-2 py-0.5 text-xs',
+        options[key] ? 'bg-white/90 text-black' : 'bg-white/10 text-white/80 hover:bg-white/20',
+      )}
+    >
+      {t(`pv.slideshow.${key}`)}
+    </button>
+  );
+  return (
+    <div
+      onMouseEnter={onHover}
+      className={clsx(
+        'absolute bottom-14 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-white shadow-lg transition-opacity duration-300',
+        visible ? 'opacity-100' : 'opacity-0 pointer-events-none',
+      )}
+    >
+      <button type="button" title={playing ? t('pv.slideshow.pause') : t('pv.slideshow.play')} onClick={onToggle}>
+        {playing ? <Pause size={16} /> : <Play size={16} />}
+      </button>
+      <button type="button" title={t('pv.slideshow.stop')} onClick={onStop}>
+        <Square size={14} />
+      </button>
+      <select
+        value={options.seconds}
+        onChange={(e) => onChange({ seconds: Number(e.target.value) })}
+        onKeyDown={(e) => e.stopPropagation()}
+        className="rounded bg-white/10 px-1 py-0.5 text-xs text-white"
+        aria-label={t('pv.slideshow.interval')}
+      >
+        {SLIDESHOW_SECONDS.map((s) => (
+          <option key={s} value={s} className="text-black">
+            {t('pv.slideshow.seconds', { count: s })}
+          </option>
+        ))}
+      </select>
+      {toggle('fade')}
+      {toggle('shuffle')}
+      {toggle('loop')}
+      {toggle('subfolders')}
+    </div>
   );
 }

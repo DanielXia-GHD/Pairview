@@ -119,8 +119,21 @@
         "keep": "Keep RAW",
         "drop": "Drop RAW"
       },
-      "keysHint": "0–5 rate · P/X flag · 6–9 label · K keep RAW · Z zoom · F full screen",
+      "keysHint": "0–5 rate · P/X flag · 6–9 label · K keep RAW · Z zoom · Enter slideshow",
       "cannotShow": "This photo can't be shown."
+    },
+    "slideshow": {
+      "start": "Slideshow (Enter)",
+      "stop": "Stop slideshow (Enter)",
+      "play": "Play (Space)",
+      "pause": "Pause (Space)",
+      "interval": "Seconds per photo",
+      "seconds_one": "{{count}} s",
+      "seconds_other": "{{count}} s",
+      "fade": "Fade",
+      "shuffle": "Shuffle",
+      "loop": "Loop",
+      "subfolders": "Sub-folders"
     }
   }
 }

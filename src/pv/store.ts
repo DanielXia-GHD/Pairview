@@ -5,6 +5,8 @@ import type { PhotoItem } from './api';
 interface PvPhotoState {
   byPath: Record<string, PhotoItem>;
   setPhotos(photos: PhotoItem[]): void;
+  /** Adds Photos (e.g. a slideshow's sub-folders) without dropping the grid's. */
+  mergePhotos(photos: PhotoItem[]): void;
   clear(): void;
 }
 
@@ -14,17 +16,18 @@ export const gridPath = (photo: PhotoItem) => photo.representativePath ?? photo.
 /** Upstream virtual copies are `path?vc=<id>`; they share their Photo's details. */
 export const basePath = (path: string) => path.split('?vc=')[0];
 
+const index = (photos: PhotoItem[]) =>
+  Object.fromEntries(
+    photos.flatMap((p) => {
+      const path = gridPath(p);
+      return path ? [[path, p]] : [];
+    }),
+  );
+
 export const usePvPhotoStore = create<PvPhotoState>((set) => ({
   byPath: {},
-  setPhotos: (photos) =>
-    set({
-      byPath: Object.fromEntries(
-        photos.flatMap((p) => {
-          const path = gridPath(p);
-          return path ? [[path, p]] : [];
-        }),
-      ),
-    }),
+  setPhotos: (photos) => set({ byPath: index(photos) }),
+  mergePhotos: (photos) => set((s) => ({ byPath: { ...s.byPath, ...index(photos) } })),
   clear: () => set({ byPath: {} }),
 }));
 
