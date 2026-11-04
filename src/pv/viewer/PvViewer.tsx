@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import clsx from 'clsx';
-import { ChevronLeft, ChevronRight, Expand, Lock, Minimize, Pause, Pencil, Play, Square, Star, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Expand, Info, Lock, Minimize, Pause, Pencil, Play, Square, Star, X } from 'lucide-react';
 import { create } from 'zustand';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -14,6 +14,7 @@ import type { ImageFile } from '../../components/ui/AppProperties';
 import { pvApi, type ColorLabel, type KeepRaw, type MetaChange, type PhotoItem } from '../api';
 import { basePath, pvPhotoForPath, usePvPhotoStore } from '../store';
 import { badgeLabel } from '../grid/PvTileBadge';
+import InfoPanel, { loadInfoOpen, saveInfoOpen } from './info';
 import { recursivePaths, shuffled, SLIDESHOW_SECONDS, useSlideshowOptions, type SlideshowOptions } from './slideshow';
 
 const PREFETCH_AHEAD = 2;
@@ -110,6 +111,15 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const enteredFullscreen = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState(loadInfoOpen);
+  const toggleInfo = useCallback(
+    () =>
+      setInfo((open) => {
+        saveInfoOpen(!open);
+        return !open;
+      }),
+    [],
+  );
 
   const go = useCallback(
     (by: number) => {
@@ -245,6 +255,7 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
       else if (key === 'Escape' && show !== 'off') stopSlideshow();
       else if (key === 'Escape' || key === ' ') close();
       else if (key === 'f' || key === 'F') void toggleFullscreen();
+      else if (key === 'i' || key === 'I') toggleInfo();
       else if (key === 'e' || key === 'E') {
         const target = photo?.representativePath ?? photo?.displayPath;
         close();
@@ -281,6 +292,7 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
     startSlideshow,
     stopSlideshow,
     toggleFullscreen,
+    toggleInfo,
   ]);
 
   // Prefetch neighbours so ←/→ is instant.
@@ -356,6 +368,9 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
         >
           {show === 'off' ? <Play size={16} /> : <Square size={14} />}
         </ChromeButton>
+        <ChromeButton title={t('pv.info.toggle')} onClick={toggleInfo} active={info}>
+          <Info size={16} />
+        </ChromeButton>
         <ChromeButton title={t('pv.viewer.fullscreen')} onClick={() => void toggleFullscreen()}>
           {fullscreen ? <Minimize size={16} /> : <Expand size={16} />}
         </ChromeButton>
@@ -403,10 +418,12 @@ function ViewerOverlay({ startPath, list, onOpenEditor }: OverlayProps) {
         />
       )}
 
+      {info && <InfoPanel photo={photo} />}
+
       {/* Side arrows */}
       {index > 0 && <SideArrow side="left" visible={chrome} onClick={() => go(-1)} title={t('pv.viewer.previous')} />}
       {index < paths.length - 1 && (
-        <SideArrow side="right" visible={chrome} onClick={() => go(1)} title={t('pv.viewer.next')} />
+        <SideArrow side="right" visible={chrome} onClick={() => go(1)} title={t('pv.viewer.next')} inset={info} />
       )}
     </div>
   );
@@ -571,14 +588,25 @@ function ZoomableImage({ photo, apiRef, onSwipe, fade }: ZoomableImageProps) {
 
 // ---- Chrome bits ----
 
-function ChromeButton({ children, title, onClick }: { children: React.ReactNode; title: string; onClick(): void }) {
+function ChromeButton({
+  children,
+  title,
+  onClick,
+  active,
+}: {
+  children: React.ReactNode;
+  title: string;
+  onClick(): void;
+  active?: boolean;
+}) {
   return (
     <button
       type="button"
       title={title}
       aria-label={title}
+      aria-pressed={active}
       onClick={onClick}
-      className="rounded-full p-2 text-white/90 hover:bg-white/15"
+      className={clsx('rounded-full p-2 text-white/90 hover:bg-white/15', active && 'bg-white/20')}
     >
       {children}
     </button>
@@ -590,11 +618,14 @@ function SideArrow({
   visible,
   onClick,
   title,
+  inset,
 }: {
   side: 'left' | 'right';
   visible: boolean;
   onClick(): void;
   title: string;
+  /** Sits left of the info panel. */
+  inset?: boolean;
 }) {
   return (
     <button
@@ -604,7 +635,7 @@ function SideArrow({
       onClick={onClick}
       className={clsx(
         'absolute top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white transition-opacity duration-300 hover:bg-black/60',
-        side === 'left' ? 'left-3' : 'right-3',
+        side === 'left' ? 'left-3' : inset ? 'right-80' : 'right-3',
         visible ? 'opacity-100' : 'opacity-0 pointer-events-none',
       )}
     >

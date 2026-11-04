@@ -3790,11 +3790,12 @@ fn apply_gentle_detail_enhance(buffer: &mut Rgb32FImage, q: &[f32], amount: f32)
     );
 }
 
+// PV: fields readable by Pairview's viewer histogram (src-tauri/src/pv/viewer.rs).
 pub struct HistogramData {
-    red: Vec<f32>,
-    green: Vec<f32>,
-    blue: Vec<f32>,
-    luma: Vec<f32>,
+    pub(crate) red: Vec<f32>,
+    pub(crate) green: Vec<f32>,
+    pub(crate) blue: Vec<f32>,
+    pub(crate) luma: Vec<f32>,
 }
 
 pub enum AnalyticsPixels {

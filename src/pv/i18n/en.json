@@ -119,8 +119,31 @@
         "keep": "Keep RAW",
         "drop": "Drop RAW"
       },
-      "keysHint": "0–5 rate · P/X flag · 6–9 label · K keep RAW · Z zoom · Enter slideshow",
+      "keysHint": "0–5 rate · P/X flag · 6–9 label · K keep RAW · Z zoom · I info · Enter slideshow",
       "cannotShow": "This photo can't be shown."
+    },
+    "info": {
+      "title": "Photo info",
+      "toggle": "Info (I)",
+      "capture": "Capture",
+      "date": "Taken",
+      "dateUncertain": "(date uncertain)",
+      "camera": "Camera",
+      "lens": "Lens",
+      "exposure": "Exposure",
+      "dimensions": "Size",
+      "location": "Location",
+      "noExif": "No EXIF read yet.",
+      "files": "Files",
+      "total": "Total",
+      "sidecars": "Sidecars: {{names}}",
+      "guardMismatch": "The RAW and display copy were taken at different times, so they are kept apart.",
+      "noHistogram": "No histogram for this photo.",
+      "role": {
+        "raw": "RAW",
+        "display": "Display",
+        "extra": "Extra"
+      }
     },
     "slideshow": {
       "start": "Slideshow (Enter)",

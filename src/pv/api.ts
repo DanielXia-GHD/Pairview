@@ -134,6 +134,14 @@ export interface PhotoDetail {
   exif: ExifSummary | null;
 }
 
+/** 256 bins per channel, scaled 0..1 (RapidRAW's histogram). */
+export interface Histogram {
+  red: number[];
+  green: number[];
+  blue: number[];
+  luma: number[];
+}
+
 /** Fields left out are not changed; `label: ''` clears the label. */
 export interface MetaChange {
   rating?: number;
@@ -177,6 +185,7 @@ export const pvApi = {
     invoke<PhotoItem[]>('pv_list_photos', { scope, sort, filter }),
   dates: (locationId?: number) => invoke<DayCount[]>('pv_dates', { locationId }),
   photoDetail: (photoId: number) => invoke<PhotoDetail | null>('pv_photo_detail', { photoId }),
+  histogram: (photoId: number) => invoke<Histogram>('pv_photo_histogram', { photoId }),
   /** Writes XMP + RapidRAW sidecars; each Photo succeeds or fails on its own. */
   setMetadata: (photoIds: number[], change: MetaChange) => invoke<SetResult[]>('pv_set_metadata', { photoIds, change }),
 };

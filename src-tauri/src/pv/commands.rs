@@ -332,6 +332,15 @@ pub fn pv_photo_detail(
         .map_err(err)
 }
 
+/// RGB + luma histogram of the Photo as the viewer shows it (info overlay, M1-16).
+#[tauri::command(async)]
+pub fn pv_photo_histogram(
+    state: State<PvState>,
+    photo_id: i64,
+) -> Result<crate::pv::viewer::Histogram, String> {
+    crate::pv::viewer::histogram(&state, photo_id).map_err(err)
+}
+
 #[derive(Serialize)]
 pub struct FolderListing {
     /// One upstream `ImageFile` per Photo (its representative file), so RapidRAW's grid,
