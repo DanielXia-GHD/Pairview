@@ -15,6 +15,7 @@ import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { formatBytes } from '../../utils/formatBytes';
 import { useUIStore } from '../../store/useUIStore';
 import { onFolderChanged, photoPreviewUrl, pvApi, type PhotoItem } from '../api';
+import { toastDeleted } from '../delete/undo';
 
 const IGNORED_KEY = 'pv.orphans.ignored';
 
@@ -149,7 +150,7 @@ function OrphanReview({ orphans, onClose, onIgnore, onChanged }: OrphanReviewPro
           setBusy(true);
           try {
             const r = await pvApi.deletePhotos(paths, 'photo');
-            toast.success(t('pv.delete.done', { count: r.photos, size: formatBytes(r.bytes, t, 1) }));
+            toastDeleted(t('pv.delete.done', { count: r.photos, size: formatBytes(r.bytes, t, 1) }));
             onChanged();
             onClose();
           } catch (e) {

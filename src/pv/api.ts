@@ -227,6 +227,14 @@ export interface Restored {
   conflicts: string[];
 }
 
+export interface Undone {
+  action: string;
+  ops: number;
+  files: number;
+  conflicts: string[];
+  locations: number[];
+}
+
 export interface Purged {
   ops: number;
   files: number;
@@ -281,6 +289,8 @@ export const pvApi = {
   orphans: () => invoke<PhotoItem[]>('pv_orphans'),
   /** Orphan review "Keep as RAW-only": catalog state only, no files change. */
   keepRawOnly: (photoIds: number[]) => invoke<number>('pv_keep_raw_only', { photoIds }),
+  /** Undoes the most recent delete still in Recently Deleted; null when there is none. */
+  undo: () => invoke<Undone | null>('pv_undo'),
 };
 
 /**

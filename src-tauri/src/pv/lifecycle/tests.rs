@@ -1015,3 +1015,63 @@ fn deleting_an_orphan_moves_its_raw_and_sidecars() {
         ]
     );
 }
+
+// ---- M2-06: undo ----
+
+#[test]
+fn undo_restores_whole_actions_newest_first() {
+    let mut f = Fixture::new(&[
+        "a/DSC0001.ARW",
+        "a/DSC0001.HIF",
+        "a/DSC0002.ARW",
+        "a/DSC0002.HIF",
+        "a/DSC0003.HIF",
+    ]);
+    let before = f.library();
+    // One action that makes two operations (Keep HIF only for the pair, the HIF-only Photo whole).
+    let first = plan_delete(
+        &f.cat,
+        &[f.photo("dsc0001"), f.photo("dsc0003")],
+        Scope::KeepDisplay,
+    )
+    .unwrap();
+    assert_eq!(first.ops.len(), 2);
+    for (_, r) in apply(&mut f.cat, &first) {
+        r.unwrap();
+    }
+    let after_first = f.library();
+    f.delete(&[f.photo("dsc0002")], Scope::Photo).unwrap();
+
+    let u = undo_last(&mut f.cat).unwrap().unwrap();
+    assert_eq!((u.ops, u.files), (1, 2));
+    assert_eq!(f.library(), after_first);
+
+    let u = undo_last(&mut f.cat).unwrap().unwrap();
+    assert_eq!((u.ops, u.files), (2, 2));
+    assert_eq!(f.library(), before);
+
+    assert!(undo_last(&mut f.cat).unwrap().is_none());
+}
+
+#[test]
+fn undo_skips_actions_already_restored_or_purged() {
+    let mut f = Fixture::new(SHOOT);
+    let a = f.delete(&[f.photo("dsc0001")], Scope::Photo).unwrap();
+    let b = f.delete(&[f.photo("dsc0002")], Scope::Photo).unwrap();
+    // The newest was restored by hand in Recently Deleted.
+    restore(&mut f.cat, f.location, &b.op_id, None).unwrap();
+    let u = undo_last(&mut f.cat).unwrap().unwrap();
+    assert_eq!(u.files, a.files);
+    // Purged actions can't come back.
+    f.delete(&[f.photo("dsc0002")], Scope::Photo).unwrap();
+    purge(&mut f.cat, f.location, None, None).unwrap();
+    assert!(undo_last(&mut f.cat).unwrap().is_none());
+}
+
+#[test]
+fn undo_on_an_offline_location_does_nothing() {
+    let mut f = Fixture::new(SHOOT);
+    f.delete(&[f.photo("dsc0001")], Scope::Photo).unwrap();
+    f.go_offline();
+    assert!(undo_last(&mut f.cat).unwrap().is_none());
+}

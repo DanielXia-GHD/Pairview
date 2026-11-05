@@ -60,6 +60,10 @@ struct Payload {
     moves: Vec<(String, String)>,
     /// XMP copies this operation created (removed again on rollback).
     created: Vec<String>,
+    /// The owner's action this operation is part of (one delete can make one operation per
+    /// location and kind); Undo restores a whole action (M2-06).
+    #[serde(default)]
+    action: Option<String>,
 }
 
 /// A finished trash operation.
@@ -87,13 +91,14 @@ fn exclusive() -> std::sync::MutexGuard<'static, ()> {
 /// fails leaves its location untouched; the others still happen.
 pub fn apply(cat: &mut Catalog, plan: &Plan) -> Vec<(i64, Result<Done>)> {
     let _one_at_a_time = exclusive();
+    let action = new_op_id();
     plan.ops
         .iter()
-        .map(|op| (op.location_id, trash(cat, op)))
+        .map(|op| (op.location_id, trash(cat, op, &action)))
         .collect()
 }
 
-fn trash(cat: &mut Catalog, op: &OpPlan) -> Result<Done> {
+fn trash(cat: &mut Catalog, op: &OpPlan, action: &str) -> Result<Done> {
     ensure!(!op.files.is_empty(), "nothing to delete");
     let location = online_location(cat, op.location_id)?;
     let root = location.path.clone();
@@ -162,6 +167,7 @@ fn trash(cat: &mut Catalog, op: &OpPlan) -> Result<Done> {
             .map(|f| (f.path.clone(), format!("{op_dir_rel}/{}", f.path)))
             .collect(),
         created: Vec::new(),
+        action: Some(action.to_string()),
     };
     let mut manifest = Manifest {
         version: manifest::VERSION,
@@ -178,6 +184,7 @@ fn trash(cat: &mut Catalog, op: &OpPlan) -> Result<Done> {
         },
         files,
         photos: op.photos.clone(),
+        action_id: Some(action.to_string()),
     };
 
     // Write-ahead: the op-log row exists before anything on disk changes.
@@ -502,6 +509,7 @@ pub fn purge(
                 .map(|f| (f.path.clone(), String::new()))
                 .collect(),
             created: Vec::new(),
+            action: None,
         };
         let purge_id = new_op_id();
         log_begin(cat, &purge_id, "purge", location_id, &payload)?;
@@ -557,6 +565,97 @@ pub fn preview_file(location_root: &Path, op_id: &str, photo: usize) -> Result<P
         }
     }
     bail!("nothing to preview for Photo {photo} of {op_id}")
+}
+
+// ---- Undo (M2-06) -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Undone {
+    pub action: String,
+    pub ops: usize,
+    pub files: usize,
+    pub conflicts: Vec<String>,
+    /// Locations whose files came back.
+    pub locations: Vec<i64>,
+}
+
+/// Undoes the owner's most recent delete that is still in Recently Deleted: every operation of
+/// that action is restored. `None` when there is nothing to undo. Calling it again undoes the
+/// action before, and so on until files are purged.
+pub fn undo_last(cat: &mut Catalog) -> Result<Option<Undone>> {
+    let rows: Vec<(String, Option<i64>, String)> = {
+        let mut stmt = cat.conn().prepare(
+            "SELECT id, location_id, payload_json FROM ops_log
+             WHERE status = 'committed' AND kind IN ('delete', 'drop_raw')
+             ORDER BY created_at DESC, id DESC LIMIT 500",
+        )?;
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    let mounts = locations::mounts();
+    let mut online: std::collections::HashMap<i64, Option<PathBuf>> = Default::default();
+    let mut target: Option<String> = None;
+    let mut ops: Vec<(String, i64)> = Vec::new();
+    for (id, location_id, payload) in rows {
+        let Some(location_id) = location_id else {
+            continue;
+        };
+        let root = online
+            .entry(location_id)
+            .or_insert_with(|| {
+                locations::get(cat, location_id)
+                    .ok()
+                    .flatten()
+                    .filter(|l| locations::status(l, &mounts).is_online())
+                    .map(|l| l.path)
+            })
+            .clone();
+        if !root.is_some_and(|r| still_deleted(&r, &id)) {
+            continue;
+        }
+        let action = serde_json::from_str::<Payload>(&payload)
+            .ok()
+            .and_then(|p| p.action)
+            .unwrap_or_else(|| id.clone());
+        match &target {
+            None => target = Some(action),
+            Some(t) if *t == action => {}
+            Some(_) => break,
+        }
+        ops.push((id, location_id));
+    }
+    let Some(action) = target else {
+        return Ok(None);
+    };
+    let mut undone = Undone {
+        action,
+        ..Default::default()
+    };
+    for (op_id, location_id) in ops {
+        let r = restore(cat, location_id, &op_id, None)?;
+        undone.ops += 1;
+        undone.files += r.files;
+        undone.conflicts.extend(r.conflicts);
+        if !undone.locations.contains(&location_id) {
+            undone.locations.push(location_id);
+        }
+    }
+    Ok(Some(undone))
+}
+
+/// Whether operation `op_id` still has files in Recently Deleted at `root`. Reads only.
+fn still_deleted(root: &Path, op_id: &str) -> bool {
+    let Ok(rel) = op_dir_rel(op_id) else {
+        return false;
+    };
+    let dir = root.join(rel);
+    Manifest::read(&dir).is_ok_and(|m| {
+        m.status == Status::Committed
+            && m.files
+                .iter()
+                .any(|f| safe_join(&dir, &f.path).is_ok_and(|p| fs::symlink_metadata(p).is_ok()))
+    })
 }
 
 // ---- Op-log replay ----------------------------------------------------------------------------

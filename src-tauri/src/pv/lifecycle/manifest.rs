@@ -49,6 +49,9 @@ pub struct Manifest {
     pub files: Vec<ManifestFile>,
     /// The Photos the files belonged to, for grouping and thumbnails in the Recently Deleted view.
     pub photos: Vec<ManifestPhoto>,
+    /// The owner's action this operation belongs to (Undo restores whole actions).
+    #[serde(default)]
+    pub action_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

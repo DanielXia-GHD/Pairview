@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { toast } from 'react-toastify';
@@ -12,6 +12,7 @@ import { ImageFlag, Invokes } from '../components/ui/AppProperties';
 import { Status } from '../components/ui/ExportImportProperties';
 import { formatBytes } from '../utils/formatBytes';
 import { chooseDelete, pvPhotosFor } from '../pv/delete/choose'; // PV: Pairview delete dialog
+import { setPvRefresh, toastDeleted } from '../pv/delete/undo'; // PV: undo deletes
 import type { DeleteResult, DeleteScope } from '../pv/api';
 
 export const transferFiles = (kind: JobKind.Copy | JobKind.Move, sourcePaths: string[], destinationFolder: string) =>
@@ -29,6 +30,9 @@ export function useFileOperations(
   sortedImageList: any[],
 ) {
   const { t } = useTranslation();
+
+  // PV: Pairview's undo reloads the grid the same way a delete does.
+  useEffect(() => setPvRefresh(refreshImageList), [refreshImageList]);
 
   const getParentDir = (filePath: string): string => {
     const separator = filePath.includes('/') ? '/' : '\\';
@@ -95,7 +99,7 @@ export function useFileOperations(
             paths: pathsToDelete,
             scope: options.pvScope,
           });
-          toast.success(t('pv.delete.done', { count: result.photos, size: formatBytes(result.bytes, t, 1) }));
+          toastDeleted(t('pv.delete.done', { count: result.photos, size: formatBytes(result.bytes, t, 1) }));
           if (result.locked > 0) toast.info(t('pv.delete.doneLocked', { count: result.locked }));
         } else {
           const command = options.includeAssociated ? 'delete_files_with_associated' : 'delete_files_from_disk';

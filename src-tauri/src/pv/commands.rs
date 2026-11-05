@@ -918,3 +918,24 @@ pub fn pv_keep_raw_only(
     }
     Ok(n)
 }
+
+// ---- Undo (M2-06) -----------------------------------------------------------------------------
+
+/// Undoes the most recent delete still in Recently Deleted (the whole action). `None` when there
+/// is nothing to undo.
+#[tauri::command]
+pub fn pv_undo(app: AppHandle, state: State<PvState>) -> Result<Option<lifecycle::Undone>, String> {
+    let mut cat = state.writer().map_err(err)?;
+    let undone = lifecycle::undo_last(&mut cat).map_err(err)?;
+    for &location_id in undone.iter().flat_map(|u| &u.locations) {
+        let _ = app.emit(
+            FOLDER_CHANGED_EVENT,
+            watch::FolderChanged {
+                location_id,
+                folders: Vec::new(),
+                shoots: Vec::new(),
+            },
+        );
+    }
+    Ok(undone)
+}

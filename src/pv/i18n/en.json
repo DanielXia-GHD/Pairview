@@ -264,6 +264,12 @@
       "kept_other": "{{count}} photos kept as RAW-only",
       "locked": "Locked Keep RAW",
       "close": "Close"
+    },
+    "undo": {
+      "button": "Undo",
+      "nothing": "Nothing to undo",
+      "done_one": "Undone: {{count}} file is back",
+      "done_other": "Undone: {{count}} files are back"
     }
   }
 }

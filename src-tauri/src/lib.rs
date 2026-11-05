@@ -3026,6 +3026,7 @@ pub fn run() {
             pv::commands::pv_empty_deleted,
             pv::commands::pv_orphans,
             pv::commands::pv_keep_raw_only,
+            pv::commands::pv_undo,
             pv::commands::pv_list_images_for_path,
             pv::commands::pv_set_metadata,
         ])
