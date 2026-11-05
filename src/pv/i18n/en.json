@@ -298,6 +298,13 @@
         "casualShoot": "Casual shoot",
         "wellExposed": "Well exposed"
       }
+    },
+    "intent": {
+      "label": "Shoot intent",
+      "hint": "Casual: HIF is enough unless a photo stands out. Important: keep every RAW that isn't rejected.",
+      "casual": "Casual",
+      "normal": "Normal",
+      "important": "Important"
     }
   }
 }

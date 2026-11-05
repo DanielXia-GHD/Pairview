@@ -12,6 +12,7 @@ import { formatBytes } from '../../utils/formatBytes';
 import { pvApi, type DeleteOption, type DeletePreview, type DeleteScope } from '../api';
 import { saveDeleteDefault, useDeleteDialog } from './choose';
 import { onUndoKey } from './undo';
+import { onGridKey } from '../grid/keys';
 
 const SCOPES: DeleteScope[] = ['photo', 'keepDisplay', 'keepRaw'];
 
@@ -20,8 +21,13 @@ export default function PvDeleteDialog() {
 
   // Cmd/Ctrl+Z in the library undoes the last delete (M2-06).
   useEffect(() => {
+    // K in the grid cycles the Keep-RAW lock (M2-08).
     window.addEventListener('keydown', onUndoKey);
-    return () => window.removeEventListener('keydown', onUndoKey);
+    window.addEventListener('keydown', onGridKey, true);
+    return () => {
+      window.removeEventListener('keydown', onUndoKey);
+      window.removeEventListener('keydown', onGridKey, true);
+    };
   }, []);
   const request = useDeleteDialog((s) => s.request);
   const [preview, setPreview] = useState<DeletePreview | null>(null);

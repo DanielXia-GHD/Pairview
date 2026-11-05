@@ -951,6 +951,55 @@ pub fn pv_raw_value(
 ) -> Result<Vec<crate::pv::signals::RawValue>, String> {
     let mut cat = state.writer().map_err(err)?;
     crate::pv::signals::ensure_stats(&mut cat, &photo_ids).map_err(err)?;
-    crate::pv::signals::raw_values(&cat, &photo_ids, |_| crate::pv::signals::Intent::Normal)
+    crate::pv::signals::raw_values(&cat, &photo_ids, |shoot| {
+        crate::pv::intent::get(&cat, shoot).unwrap_or_default()
+    })
+    .map_err(err)
+}
+
+// ---- Shoot intent (M2-08) ---------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShootIntent {
+    pub folder_id: i64,
+    pub intent: crate::pv::signals::Intent,
+}
+
+/// The intent of the shoot at `path` (a folder of Photos), or `None` for anything else.
+#[tauri::command]
+pub fn pv_shoot_intent(state: State<PvState>, path: String) -> Result<Option<ShootIntent>, String> {
+    state
+        .read(|cat| {
+            let Some((folder, _)) = queries::folder_at_path(cat, Path::new(&path))? else {
+                return Ok(None);
+            };
+            let tx = cat.conn().unchecked_transaction()?;
+            let shoot = crate::pv::assets::shoot_of(&tx, folder)?;
+            drop(tx);
+            let Some(shoot) = shoot else { return Ok(None) };
+            let photos: i64 = cat.conn().query_row(
+                "SELECT COUNT(*) FROM photos WHERE shoot_folder_id = ?1",
+                [shoot],
+                |r| r.get(0),
+            )?;
+            if photos == 0 {
+                return Ok(None);
+            }
+            Ok(Some(ShootIntent {
+                folder_id: shoot,
+                intent: crate::pv::intent::get(cat, shoot)?,
+            }))
+        })
         .map_err(err)
+}
+
+#[tauri::command]
+pub fn pv_set_shoot_intent(
+    state: State<PvState>,
+    folder_id: i64,
+    intent: crate::pv::signals::Intent,
+) -> Result<(), String> {
+    let cat = state.writer().map_err(err)?;
+    crate::pv::intent::set(&cat, folder_id, intent).map_err(err)
 }

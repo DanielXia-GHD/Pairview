@@ -235,6 +235,14 @@ export interface Undone {
   locations: number[];
 }
 
+/** Shoot intent (PRD §6.5): moves the Keep RAW / HIF is enough line for the whole shoot. */
+export type ShootIntentValue = 'casual' | 'normal' | 'important';
+
+export interface ShootIntent {
+  folderId: number;
+  intent: ShootIntentValue;
+}
+
 export type Verdict = 'keepRaw' | 'yourCall' | 'hifEnough';
 
 export type RawValueChipKind =
@@ -331,6 +339,11 @@ export const pvApi = {
   undo: () => invoke<Undone | null>('pv_undo'),
   /** Keep RAW / Your call / HIF is enough with reason chips. */
   rawValue: (photoIds: number[]) => invoke<RawValue[]>('pv_raw_value', { photoIds }),
+  /** The intent of the shoot at a folder path; null when the path isn't a shoot. */
+  shootIntent: (path: string) => invoke<ShootIntent | null>('pv_shoot_intent', { path }),
+  /** Writes `.pairview-shoot.json` in the shoot folder. */
+  setShootIntent: (folderId: number, intent: ShootIntentValue) =>
+    invoke<void>('pv_set_shoot_intent', { folderId, intent }),
 };
 
 /**

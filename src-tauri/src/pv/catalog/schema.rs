@@ -7,7 +7,7 @@
 //!   source of truth, so rows can always be rebuilt by a rescan.
 
 /// `MIGRATIONS[i]` upgrades the catalog from version `i` to version `i + 1`.
-pub const MIGRATIONS: &[&str] = &[V1, V2];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3];
 
 /// The schema version this build writes.
 pub const LATEST_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -153,4 +153,10 @@ CREATE TABLE raw_signals (
     green_magenta  REAL    NOT NULL, -- mean G / mean (R+B)/2 over mid-tones
     computed_at    INTEGER NOT NULL
 );
+"#;
+
+const V3: &str = r#"
+-- Shoot intent (M2-08): Casual / Normal / Important, set by the owner (AI guess in M4). Mirrors
+-- `<shoot>/.pairview-shoot.json`, which is the record on disk; NULL = not read yet.
+ALTER TABLE folders ADD COLUMN intent TEXT CHECK (intent IN ('casual', 'normal', 'important'));
 "#;
