@@ -72,6 +72,9 @@ pub enum Scope {
     /// A folder's shoot, or with `recursive` everything under it.
     #[serde(rename_all = "camelCase")]
     Folder { folder_id: i64, recursive: bool },
+    /// Every Photo, optionally of one location (for filters like the orphan review).
+    #[serde(rename_all = "camelCase")]
+    All { location_id: Option<i64> },
     /// Capture dates `from..=to` (`YYYY-MM-DD`), optionally one location.
     #[serde(rename_all = "camelCase")]
     Dates {
@@ -178,6 +181,12 @@ pub fn list_photos(
                 wheres.push(format!(
                     "(s.rel_path = {exact} OR s.rel_path GLOB {prefix})"
                 ));
+            }
+        }
+        Scope::All { location_id } => {
+            if let Some(location) = location_id {
+                let l = param(Box::new(*location), &mut params);
+                wheres.push(format!("s.location_id = {l}"));
             }
         }
         Scope::Dates {

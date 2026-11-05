@@ -240,6 +240,30 @@
       "loading": "Loading…",
       "offline": "{{name}} is offline; its Recently Deleted shows when it's connected.",
       "close": "Close"
+    },
+    "orphans": {
+      "banner_one": "{{count}} RAW lost its display copy",
+      "banner_other": "{{count}} RAWs lost their display copy",
+      "bannerHint": "A HIF or JPG was deleted outside Pairview. Review what to do with the RAWs.",
+      "title_one": "{{count}} RAW without its display copy",
+      "title_other": "{{count}} RAWs without their display copy",
+      "subtitle": "Their HIF or JPG was deleted outside Pairview, which usually means they weren't keepers. Nothing is deleted until you choose.",
+      "selected": "{{count}} selected · {{size}}",
+      "selectAll": "Select all",
+      "selectNone": "Select none",
+      "ignore": "Ignore",
+      "keepRawOnly": "Keep as RAW-only",
+      "deleteRaws_one": "Delete {{count}} RAW",
+      "deleteRaws_other": "Delete {{count}} RAWs",
+      "deleteTitle_one": "Delete {{count}} RAW?",
+      "deleteTitle_other": "Delete {{count}} RAWs?",
+      "deleteMessage_one": "{{count}} RAW ({{size}}) and its edits go to Recently Deleted for 30 days.",
+      "deleteMessage_other": "{{count}} RAWs ({{size}}) and their edits go to Recently Deleted for 30 days.",
+      "deleteConfirm": "Delete",
+      "kept_one": "{{count}} photo kept as RAW-only",
+      "kept_other": "{{count}} photos kept as RAW-only",
+      "locked": "Locked Keep RAW",
+      "close": "Close"
     }
   }
 }

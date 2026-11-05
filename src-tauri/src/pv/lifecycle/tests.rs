@@ -956,3 +956,62 @@ fn restoring_one_photo_of_an_operation_keeps_the_rest() {
     assert!(preview_file(&f.root, &done.op_id, 0).is_ok());
     assert!(preview_file(&f.root, &done.op_id, 1).is_err());
 }
+
+// ---- M2-05: orphans ----
+
+fn state_of(f: &Fixture, photo: i64) -> String {
+    f.cat
+        .conn()
+        .query_row("SELECT state FROM photos WHERE id = ?1", [photo], |r| {
+            r.get(0)
+        })
+        .unwrap()
+}
+
+#[test]
+fn keep_raw_only_is_not_an_orphan_but_a_lost_hif_is() {
+    let mut f = Fixture::new(SHOOT);
+    let kept = f.photo("dsc0001");
+    f.delete(&[kept], Scope::KeepRaw).unwrap();
+    assert_eq!(state_of(&f, kept), "raw_only");
+
+    // A HIF deleted in Finder.
+    let lost = f.photo("dsc0002");
+    fs::remove_file(f.abs("2026-10-23_1/hif/DSC0002.HIF")).unwrap();
+    f.rescan();
+    assert_eq!(state_of(&f, lost), "orphan_raw");
+    assert_eq!(state_of(&f, kept), "raw_only");
+
+    // Keep as RAW-only.
+    assert_eq!(
+        crate::pv::assets::mark_raw_only(&f.cat, &[lost, kept]).unwrap(),
+        1
+    );
+    assert_eq!(state_of(&f, lost), "raw_only");
+    f.rescan();
+    assert_eq!(state_of(&f, lost), "raw_only");
+
+    // Restoring the HIF makes it a pair again.
+    let op = list(&mut f.cat, f.location).unwrap().pop().unwrap();
+    restore(&mut f.cat, f.location, &op.manifest.op_id, None).unwrap();
+    assert_eq!(state_of(&f, kept), "raw_display");
+}
+
+#[test]
+fn deleting_an_orphan_moves_its_raw_and_sidecars() {
+    let mut f = Fixture::new(SHOOT);
+    let p = f.photo("dsc0001");
+    fs::remove_file(f.abs("2026-10-23_1/hif/DSC0001.HIF")).unwrap();
+    fs::remove_file(f.abs("2026-10-23_1/hif/DSC0001.HIF.rrdata")).unwrap();
+    f.rescan();
+    assert_eq!(state_of(&f, p), "orphan_raw");
+    let done = f.delete(&[p], Scope::Photo).unwrap();
+    assert_eq!(done.files, 3);
+    assert_eq!(
+        f.library().keys().collect::<Vec<_>>(),
+        [
+            "2026-10-23_1/arw/DSC0002.ARW",
+            "2026-10-23_1/hif/DSC0002.HIF"
+        ]
+    );
+}

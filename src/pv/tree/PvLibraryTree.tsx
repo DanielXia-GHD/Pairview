@@ -10,6 +10,7 @@ import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { onFolderChanged, pvApi, type FolderNode, type LocationInfo } from '../api';
 import PvDatesTree from './PvDatesTree';
 import { RecentlyDeletedEntry } from '../deleted/RecentlyDeleted';
+import { OrphanBanner } from '../orphans/OrphanReview';
 
 interface PvLibraryTreeProps {
   onFolderSelect(path: string): void;
@@ -89,6 +90,12 @@ export default function PvLibraryTree({ onFolderSelect, selectedPath }: PvLibrar
 
   return (
     <>
+      <OrphanBanner
+        onChanged={() => {
+          void loadAll();
+          if (selectedPath) onFolderSelect(selectedPath);
+        }}
+      />
       <div className="pb-2">
         <div
           className="flex items-center w-full px-1 py-1.5 cursor-pointer rounded-md hover:bg-surface/30 transition-colors"

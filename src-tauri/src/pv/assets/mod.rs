@@ -423,6 +423,20 @@ fn update_date_hint(tx: &Transaction, shoot_id: i64) -> Result<()> {
     Ok(())
 }
 
+/// Orphan review "Keep as RAW-only" (M2-05): `⚠ RAW` Photos become plain RAW-only. Catalog
+/// only; no file changes. Returns how many changed.
+pub fn mark_raw_only(cat: &Catalog, photo_ids: &[i64]) -> Result<usize> {
+    let mut n = 0;
+    for id in photo_ids {
+        n += cat.conn().execute(
+            "UPDATE photos SET state = 'raw_only', updated_at = ?2
+             WHERE id = ?1 AND state = 'orphan_raw'",
+            (id, crate::pv::catalog::now_ms()),
+        )?;
+    }
+    Ok(n)
+}
+
 /// Absolute path of a catalog file at the location's current mount path.
 pub fn file_path(cat: &Catalog, file_id: i64) -> Result<PathBuf> {
     let (location, rel, name): (String, String, String) = cat.conn().query_row(

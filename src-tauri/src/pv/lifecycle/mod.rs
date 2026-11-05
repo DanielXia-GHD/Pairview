@@ -225,6 +225,23 @@ fn trash(cat: &mut Catalog, op: &OpPlan) -> Result<Done> {
 /// Removes trashed files from the catalog and re-pairs their shoots.
 fn forget_files(cat: &mut Catalog, op: &OpPlan) -> Result<()> {
     let tx = cat.conn_mut().transaction()?;
+    // Photos that keep their RAW after this: their display copy went on purpose (Keep RAW only),
+    // so they are RAW-only, not orphans (`⚠ RAW` is for copies lost outside the app).
+    let mut touched = Vec::new();
+    for f in &op.files {
+        if let Some(id) = f.file_id
+            && let Some(photo) = tx
+                .query_row(
+                    "SELECT photo_id FROM photo_members WHERE file_id = ?1",
+                    [id],
+                    |r| r.get::<_, i64>(0),
+                )
+                .optional()?
+            && !touched.contains(&photo)
+        {
+            touched.push(photo);
+        }
+    }
     for f in &op.files {
         if let Some(id) = f.file_id {
             tx.execute("DELETE FROM files WHERE id = ?1", [id])?;
@@ -232,6 +249,12 @@ fn forget_files(cat: &mut Catalog, op: &OpPlan) -> Result<()> {
     }
     for &shoot in &op.shoots {
         assets::rebuild_shoot(&tx, shoot)?;
+    }
+    for photo in touched {
+        tx.execute(
+            "UPDATE photos SET state = 'raw_only' WHERE id = ?1 AND state = 'orphan_raw'",
+            [photo],
+        )?;
     }
     tx.commit()?;
     Ok(())

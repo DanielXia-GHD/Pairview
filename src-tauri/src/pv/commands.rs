@@ -865,3 +865,56 @@ fn purge_expired_in_background(catalog_path: PathBuf) {
         }
     });
 }
+
+// ---- Orphans (M2-05) --------------------------------------------------------------------------
+
+/// `⚠ RAW` Photos everywhere: RAWs whose display copy disappeared outside the app.
+#[tauri::command]
+pub fn pv_orphans(state: State<PvState>) -> Result<Vec<PhotoItem>, String> {
+    state
+        .read(|cat| {
+            queries::list_photos(
+                cat,
+                &Scope::All { location_id: None },
+                &Sort::default(),
+                &Filter {
+                    states: vec!["orphan_raw".into()],
+                    ..Default::default()
+                },
+            )
+        })
+        .map_err(err)
+}
+
+/// Orphan review "Keep as RAW-only". Changes no files.
+#[tauri::command]
+pub fn pv_keep_raw_only(
+    app: AppHandle,
+    state: State<PvState>,
+    photo_ids: Vec<i64>,
+) -> Result<usize, String> {
+    let cat = state.writer().map_err(err)?;
+    let n = crate::pv::assets::mark_raw_only(&cat, &photo_ids).map_err(err)?;
+    let mut locations: Vec<i64> = Vec::new();
+    for id in &photo_ids {
+        if let Ok(l) = cat.conn().query_row(
+            "SELECT f.location_id FROM photos p JOIN folders f ON f.id = p.shoot_folder_id WHERE p.id = ?1",
+            [id],
+            |r| r.get::<_, i64>(0),
+        ) && !locations.contains(&l)
+        {
+            locations.push(l);
+        }
+    }
+    for location_id in locations {
+        let _ = app.emit(
+            FOLDER_CHANGED_EVENT,
+            watch::FolderChanged {
+                location_id,
+                folders: Vec::new(),
+                shoots: Vec::new(),
+            },
+        );
+    }
+    Ok(n)
+}

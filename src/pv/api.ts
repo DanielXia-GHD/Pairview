@@ -237,6 +237,9 @@ export interface Purged {
 export const PVIMG_BASE = navigator.userAgent.includes('Windows') ? 'http://pvimg.localhost' : 'pvimg://localhost';
 
 /** A small JPEG of a Photo in Recently Deleted. */
+/** A Photo's preview (a RAW-only Photo gets its embedded preview). */
+export const photoPreviewUrl = (photoId: number) => `${PVIMG_BASE}/photo/${photoId}?jpeg`;
+
 export const deletedPreviewUrl = (locationId: number, opId: string, index: number) =>
   `${PVIMG_BASE}/deleted/${locationId}/${opId}/${index}`;
 
@@ -274,6 +277,10 @@ export const pvApi = {
     invoke<Restored>('pv_restore_deleted', { locationId, opId, photos, files }),
   /** Empty now. Permanent: only files listed in Recently Deleted manifests are deleted. */
   emptyDeleted: (locationId?: number, opIds?: string[]) => invoke<Purged>('pv_empty_deleted', { locationId, opIds }),
+  /** `⚠ RAW` Photos everywhere: RAWs whose display copy disappeared outside Pairview. */
+  orphans: () => invoke<PhotoItem[]>('pv_orphans'),
+  /** Orphan review "Keep as RAW-only": catalog state only, no files change. */
+  keepRawOnly: (photoIds: number[]) => invoke<number>('pv_keep_raw_only', { photoIds }),
 };
 
 /**
