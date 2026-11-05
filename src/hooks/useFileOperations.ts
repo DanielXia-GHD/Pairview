@@ -10,6 +10,9 @@ import { JobKind, useProcessStore } from '../store/useProcessStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { ImageFlag, Invokes } from '../components/ui/AppProperties';
 import { Status } from '../components/ui/ExportImportProperties';
+import { formatBytes } from '../utils/formatBytes';
+import { chooseDelete, pvPhotosFor } from '../pv/delete/choose'; // PV: Pairview delete dialog
+import type { DeleteResult, DeleteScope } from '../pv/api';
 
 export const transferFiles = (kind: JobKind.Copy | JobKind.Move, sourcePaths: string[], destinationFolder: string) =>
   useProcessStore
@@ -35,7 +38,17 @@ export function useFileOperations(
   };
 
   const executeDelete = useCallback(
-    async (pathsToDelete: Array<string>, options = { includeAssociated: false }) => {
+    async (
+      pathsToDelete: Array<string>,
+      options: { includeAssociated: boolean; pvScope?: DeleteScope } = { includeAssociated: false },
+    ) => {
+      // PV: Pairview Photos get the Pairview delete dialog (or the remembered choice) and go to
+      // Recently Deleted; anything else is deleted by upstream as before.
+      if (!options.pvScope) {
+        const choice = await chooseDelete(pathsToDelete, options.includeAssociated);
+        if (choice === 'cancel') return;
+        if (choice) options = { ...options, pvScope: choice };
+      }
       if (!pathsToDelete || pathsToDelete.length === 0) return;
 
       const { libraryActivePath, setLibrary } = useLibraryStore.getState();
@@ -76,8 +89,18 @@ export function useFileOperations(
       }
 
       try {
-        const command = options.includeAssociated ? 'delete_files_with_associated' : 'delete_files_from_disk';
-        await invoke(command, { paths: pathsToDelete });
+        if (options.pvScope) {
+          // PV: Recently Deleted via pv/lifecycle.
+          const result = await invoke<DeleteResult>('pv_delete_photos', {
+            paths: pathsToDelete,
+            scope: options.pvScope,
+          });
+          toast.success(t('pv.delete.done', { count: result.photos, size: formatBytes(result.bytes, t, 1) }));
+          if (result.locked > 0) toast.info(t('pv.delete.doneLocked', { count: result.locked }));
+        } else {
+          const command = options.includeAssociated ? 'delete_files_with_associated' : 'delete_files_from_disk';
+          await invoke(command, { paths: pathsToDelete });
+        }
         await refreshImageList();
 
         if (selectedImage && activeView === 'editor') {
@@ -110,7 +133,7 @@ export function useFileOperations(
         toast.error(`Failed to delete files: ${err}`);
       }
     },
-    [refreshImageList, handleBackToLibrary, sortedImageList, handleImageSelect],
+    [refreshImageList, handleBackToLibrary, sortedImageList, handleImageSelect, t],
   );
 
   const handleDeleteSelected = useCallback(() => {
@@ -119,6 +142,11 @@ export function useFileOperations(
 
     const pathsToDelete = multiSelectedPaths;
     if (pathsToDelete.length === 0) {
+      return;
+    }
+    // PV: Pairview Photos skip upstream's confirm; executeDelete shows the Pairview dialog.
+    if (pvPhotosFor(pathsToDelete)) {
+      void executeDelete(pathsToDelete);
       return;
     }
 
@@ -182,7 +210,12 @@ export function useFileOperations(
           affectedCopyCount > 0
             ? `${deleteMessage}\n\n${t('library.reject.virtualCopiesWarning', { count: affectedCopyCount })}`
             : deleteMessage,
-        onConfirm: () => executeDelete(rejectedPaths, { includeAssociated: false }),
+        // PV: rejected Pairview Photos go whole, without a second dialog (PRD §6.6).
+        onConfirm: () =>
+          executeDelete(rejectedPaths, {
+            includeAssociated: false,
+            pvScope: pvPhotosFor(rejectedPaths) ? 'photo' : undefined,
+          }),
         title: t('library.reject.deleteTitle'),
       },
     });

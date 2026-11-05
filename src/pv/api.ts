@@ -164,6 +164,32 @@ export interface FolderChanged {
 
 // ---- Commands ----
 
+/** The delete dialog's choices (PRD §6.6). */
+export type DeleteScope = 'photo' | 'keepDisplay' | 'keepRaw';
+
+export interface DeleteOption {
+  photos: number;
+  files: number;
+  bytes: number;
+  /** Photos the Keep-RAW lock keeps out of Keep HIF only. */
+  locked: number;
+}
+
+export interface DeletePreview {
+  /** Photos with both a RAW and a display copy: the choices apply to these. */
+  pairs: number;
+  photo: DeleteOption;
+  keepDisplay: DeleteOption;
+  keepRaw: DeleteOption;
+}
+
+export interface DeleteResult {
+  photos: number;
+  files: number;
+  bytes: number;
+  locked: number;
+}
+
 export const pvApi = {
   locations: {
     list: () => invoke<LocationInfo[]>('pv_locations_list'),
@@ -188,6 +214,10 @@ export const pvApi = {
   histogram: (photoId: number) => invoke<Histogram>('pv_photo_histogram', { photoId }),
   /** Writes XMP + RapidRAW sidecars; each Photo succeeds or fails on its own. */
   setMetadata: (photoIds: number[], change: MetaChange) => invoke<SetResult[]>('pv_set_metadata', { photoIds, change }),
+  /** What each delete choice would move to Recently Deleted. Changes nothing. */
+  deletePreview: (photoIds: number[]) => invoke<DeletePreview>('pv_delete_preview', { photoIds }),
+  /** Moves to Recently Deleted (30 days). `paths` are grid paths. */
+  deletePhotos: (paths: string[], scope: DeleteScope) => invoke<DeleteResult>('pv_delete_photos', { paths, scope }),
 };
 
 /**

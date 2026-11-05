@@ -152,6 +152,42 @@ pub fn plan_photos(cat: &Catalog, photo_ids: &[i64], scope: Scope) -> Result<Pla
     Ok(b.finish())
 }
 
+/// The delete dialog's plan: `scope` for RAW+display Photos; a Photo the scope can't apply to
+/// (no RAW, or no display copy) is deleted whole, since deleting it was asked for. Locked Photos
+/// are skipped for Keep HIF only.
+pub fn plan_delete(cat: &Catalog, photo_ids: &[i64], scope: Scope) -> Result<Plan> {
+    let mut b = Builder::default();
+    let mut seen = HashSet::new();
+    for &photo_id in photo_ids.iter().filter(|&&id| seen.insert(id)) {
+        b.add_photo(cat, photo_id, How::Scope(scope))?;
+        if let Some(last) = b.skipped.last()
+            && last.photo_id == photo_id
+            && matches!(last.reason, SkipReason::NoRaw | SkipReason::NoDisplay)
+        {
+            b.skipped.pop();
+            b.add_photo(cat, photo_id, How::Scope(Scope::Photo))?;
+        }
+    }
+    Ok(b.finish())
+}
+
+/// Photo ids for grid paths (representative or display file). `None` when any path isn't a
+/// catalogued Photo, so the caller can leave the whole request to upstream.
+pub fn photo_ids_for_paths(cat: &Catalog, paths: &[PathBuf]) -> Result<Option<Vec<i64>>> {
+    let locations = crate::pv::locations::list(cat)?;
+    let mut ids = Vec::new();
+    for path in paths {
+        let Some((location, rel)) = locate(&locations, path) else {
+            return Ok(None);
+        };
+        match file_row(cat, location.id, &rel)? {
+            Some((_, Some(photo))) => ids.push(photo),
+            _ => return Ok(None),
+        }
+    }
+    Ok(Some(ids))
+}
+
 /// Plans a delete of exact files (absolute paths), as RapidRAW's "delete selected file" asks.
 /// Per Photo, the files asked for decide what it means: every main file → Delete photo; its
 /// RAW(s) while a display copy stays → Keep HIF only (lock honoured, XMP kept); its display

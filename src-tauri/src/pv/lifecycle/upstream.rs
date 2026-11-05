@@ -102,9 +102,19 @@ fn run(
             s.reason
         ));
     }
+    execute(app, &mut cat, &plan)
+}
+
+/// Applies a plan and tells the trees and grid which shoots changed. Every location's operation
+/// runs; the errors of those that failed are returned together.
+pub(crate) fn execute(
+    app: &AppHandle,
+    cat: &mut crate::pv::catalog::Catalog,
+    plan: &Plan,
+) -> Result<Vec<Done>, String> {
     let mut done = Vec::new();
     let mut errors = Vec::new();
-    for (op, (location_id, result)) in plan.ops.iter().zip(apply(&mut cat, &plan)) {
+    for (op, (location_id, result)) in plan.ops.iter().zip(apply(cat, plan)) {
         match result {
             Ok(d) => {
                 let _ = app.emit(
@@ -140,4 +150,9 @@ fn remove_empty_dirs(dir: &std::path::Path) {
 
 fn err(e: anyhow::Error) -> String {
     format!("{e:#}")
+}
+
+/// A grid path without its virtual-copy suffix.
+pub fn base_path(path: &str) -> &str {
+    path.split("?vc=").next().unwrap_or(path)
 }

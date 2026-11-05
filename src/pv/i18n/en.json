@@ -173,6 +173,40 @@
       "shuffle": "Shuffle",
       "loop": "Loop",
       "subfolders": "Sub-folders"
+    },
+    "delete": {
+      "title_one": "Delete {{count}} photo?",
+      "title_other": "Delete {{count}} photos?",
+      "scope": {
+        "photo": "Delete photo",
+        "keepDisplay": "Keep {{display}} only",
+        "keepRaw": "Keep RAW only"
+      },
+      "scopeHint": {
+        "photo": "RAW, {{display}}, edits and sidecars",
+        "keepDisplay": "Removes the RAW and its edits",
+        "keepRaw": "Removes the {{display}}"
+      },
+      "displayCopy": "display copy",
+      "locked_one": "{{count}} photo is locked Keep RAW (K) and stays as it is",
+      "locked_other": "{{count}} photos are locked Keep RAW (K) and stay as they are",
+      "unpaired_one": "{{count}} photo has no RAW + display pair and is deleted whole.",
+      "unpaired_other": "{{count}} photos have no RAW + display pair and are deleted whole.",
+      "dontAsk": "Don't ask again — always do this",
+      "recentlyDeleted": "Files go to Recently Deleted and can be restored for 30 days.",
+      "previewFailed": "Couldn't check these photos. Is the location online?",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "done_one": "Moved {{count}} photo to Recently Deleted ({{size}})",
+      "done_other": "Moved {{count}} photos to Recently Deleted ({{size}})",
+      "doneLocked_one": "{{count}} locked photo was kept",
+      "doneLocked_other": "{{count}} locked photos were kept",
+      "settings": {
+        "title": "Deleting",
+        "label": "When deleting a RAW + display photo",
+        "hint": "Choose “Ask every time” to bring the delete dialog back.",
+        "ask": "Ask every time"
+      }
     }
   }
 }

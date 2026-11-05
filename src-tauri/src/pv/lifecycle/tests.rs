@@ -857,3 +857,62 @@ fn folder_delete_refuses_the_location_root_and_recently_deleted() {
     let outside = f.root.parent().unwrap().to_path_buf();
     assert!(plan::plan_folder(&f.cat, &outside).unwrap().is_none());
 }
+
+// ---- M2-03: the delete dialog ----
+
+#[test]
+fn dialog_choice_applies_to_pairs_and_others_go_whole() {
+    let mut f = Fixture::new(&[
+        "s/DSC0001.ARW",
+        "s/DSC0001.HIF",
+        "s/DSC0002.HIF",
+        "s/DSC0003.ARW",
+        "s/DSC0004.ARW",
+        "s/DSC0004.HIF",
+    ]);
+    f.cat
+        .conn()
+        .execute(
+            "INSERT INTO metadata (photo_id, keep_raw, updated_at) VALUES (?1, 'keep', 0)",
+            [f.photo("dsc0004")],
+        )
+        .unwrap();
+    let ids: Vec<i64> = ["dsc0001", "dsc0002", "dsc0003", "dsc0004"]
+        .iter()
+        .map(|s| f.photo(s))
+        .collect();
+    let plan = plan_delete(&f.cat, &ids, Scope::KeepDisplay).unwrap();
+    assert_eq!(plan.skipped.len(), 1);
+    assert_eq!(plan.skipped[0].reason, SkipReason::Locked);
+    for (_, r) in apply(&mut f.cat, &plan) {
+        r.unwrap();
+    }
+    assert_eq!(
+        f.library().keys().collect::<Vec<_>>(),
+        ["s/DSC0001.HIF", "s/DSC0004.ARW", "s/DSC0004.HIF"]
+    );
+    let reasons: Vec<Reason> = list(&mut f.cat, f.location)
+        .unwrap()
+        .iter()
+        .map(|o| o.manifest.reason)
+        .collect();
+    assert_eq!(reasons.len(), 2);
+    assert!(reasons.contains(&Reason::Slimmed) && reasons.contains(&Reason::Deleted));
+}
+
+#[test]
+fn grid_paths_map_to_photos_only_when_all_are_photos() {
+    let f = Fixture::new(SHOOT);
+    let raw = f.abs("2026-10-23_1/arw/DSC0001.ARW");
+    let hif = f.abs("2026-10-23_1/hif/DSC0002.HIF");
+    let ids = plan::photo_ids_for_paths(&f.cat, &[raw.clone(), hif])
+        .unwrap()
+        .unwrap();
+    assert_eq!(ids, [f.photo("dsc0001"), f.photo("dsc0002")]);
+    let other = f.root.parent().unwrap().join("x.jpg");
+    assert!(
+        plan::photo_ids_for_paths(&f.cat, &[raw, other])
+            .unwrap()
+            .is_none()
+    );
+}

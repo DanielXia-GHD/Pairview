@@ -59,6 +59,7 @@ import { useCloudUsage } from '../../hooks/useCloudUsage';
 import { open } from '@tauri-apps/plugin-shell';
 import { FolderTree } from 'lucide-react'; // PV
 import LocationsSettings from '../../pv/locations/LocationsSettings'; // PV: Library Locations
+import DeleteSettings from '../../pv/delete/DeleteSettings'; // PV: Deleting default
 import ImmichSettings from '../immich/ImmichSettings';
 import DataManagementSettings from './settings/DataManagementSettings';
 import EditInAppsSettings from './settings/EditInAppsSettings';
@@ -2474,6 +2475,8 @@ export default function SettingsPanel({
                     </Text>
                     <LocationsSettings />
                   </div>
+                  {/* PV: Deleting default (PRD §6.6) */}
+                  <DeleteSettings />
                 </motion.div>
               )}
 

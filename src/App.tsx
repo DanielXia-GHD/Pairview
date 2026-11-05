@@ -85,6 +85,7 @@ import ImageLoaderManager from './components/managers/ImageLoaderManager';
 import { isImmichAlbumId } from './components/immich/immichApi';
 import { useImmichEvents } from './components/immich/useImmichEvents';
 import PvViewer from './pv/viewer/PvViewer'; // PV
+import PvDeleteDialog from './pv/delete/PvDeleteDialog'; // PV: delete dialog
 
 const DND_MEASURING = { droppable: { strategy: MeasuringStrategy.Always } };
 
@@ -1073,6 +1074,8 @@ function App() {
         />
         {/* PV: Pixea-style viewer (Space / double-click on a Photo) */}
         <PvViewer sortedImageList={sortedImageList} onOpenEditor={(path) => handleImageSelect(path)} />
+        {/* PV: delete dialog (Delete photo / Keep HIF only / Keep RAW only) */}
+        <PvDeleteDialog />
         <ToastContainer
           position="bottom-right"
           autoClose={5000}

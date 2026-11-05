@@ -42,7 +42,7 @@ use crate::pv::locations::{self, Location};
 pub use manifest::{Manifest, ManifestFile, Reason};
 use manifest::{ManifestLocation, Status, safe_join, safe_rel};
 #[allow(unused_imports)]
-pub use plan::{OpPlan, Plan, Scope, SkipReason, plan_photos};
+pub use plan::{OpPlan, Plan, Scope, SkipReason, plan_delete, plan_photos};
 
 /// Recently Deleted folder at each location root. The scanner skips dot-folders.
 pub const TRASH_DIR: &str = ".pairview-deleted";

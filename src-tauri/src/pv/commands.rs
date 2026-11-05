@@ -10,10 +10,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use anyhow::{Context, Result, anyhow};
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::pv::catalog::{self, Catalog};
+use crate::pv::lifecycle;
 use crate::pv::locations::{self, Location, LocationSettings, Status, Suggestion};
 use crate::pv::metadata::{self, Change, Flag, KeepRaw, PhotoMeta};
 use crate::pv::queries::{self, DayCount, Filter, FolderNode, PhotoDetail, PhotoItem, Scope, Sort};
@@ -558,4 +560,106 @@ mod tests {
         assert!(results[1].error.is_some());
         assert!(root.join("a/DSC00001.xmp").exists());
     }
+}
+
+// ---- Deleting (M2-03) -------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteOption {
+    pub photos: usize,
+    pub files: usize,
+    pub bytes: u64,
+    /// Photos the Keep-RAW lock keeps out of Keep HIF only.
+    pub locked: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletePreview {
+    /// Photos with both a RAW and a display copy: the dialog's choices apply to these.
+    pub pairs: usize,
+    pub photo: DeleteOption,
+    pub keep_display: DeleteOption,
+    pub keep_raw: DeleteOption,
+}
+
+/// What each choice of the delete dialog would move to Recently Deleted. Changes nothing.
+#[tauri::command]
+pub fn pv_delete_preview(
+    state: State<PvState>,
+    photo_ids: Vec<i64>,
+) -> Result<DeletePreview, String> {
+    state
+        .read(|cat| {
+            let option = |scope| -> Result<DeleteOption> {
+                let plan = lifecycle::plan_delete(cat, &photo_ids, scope)?;
+                Ok(DeleteOption {
+                    photos: plan.photos(),
+                    files: plan.ops.iter().map(|o| o.files.len()).sum(),
+                    bytes: plan.bytes(),
+                    locked: plan
+                        .skipped
+                        .iter()
+                        .filter(|s| s.reason == lifecycle::SkipReason::Locked)
+                        .count(),
+                })
+            };
+            let mut pairs = 0;
+            for id in &photo_ids {
+                let state: Option<String> = cat
+                    .conn()
+                    .query_row("SELECT state FROM photos WHERE id = ?1", [id], |r| r.get(0))
+                    .optional()?;
+                if matches!(state.as_deref(), Some("raw_display" | "edited")) {
+                    pairs += 1;
+                }
+            }
+            Ok(DeletePreview {
+                pairs,
+                photo: option(lifecycle::Scope::Photo)?,
+                keep_display: option(lifecycle::Scope::KeepDisplay)?,
+                keep_raw: option(lifecycle::Scope::KeepRaw)?,
+            })
+        })
+        .map_err(err)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteResult {
+    pub photos: usize,
+    pub files: usize,
+    pub bytes: u64,
+    /// Photos left alone (Keep-RAW lock).
+    pub locked: usize,
+}
+
+/// The delete dialog's action on grid paths: moves to Recently Deleted (pv/lifecycle).
+#[tauri::command]
+pub fn pv_delete_photos(
+    app: AppHandle,
+    state: State<PvState>,
+    paths: Vec<String>,
+    scope: lifecycle::Scope,
+) -> Result<DeleteResult, String> {
+    let targets: Vec<PathBuf> = paths
+        .iter()
+        .map(|p| PathBuf::from(crate::pv::lifecycle::upstream::base_path(p)))
+        .collect();
+    let mut cat = state.writer().map_err(err)?;
+    let ids = lifecycle::plan::photo_ids_for_paths(&cat, &targets)
+        .map_err(err)?
+        .ok_or_else(|| "some of these aren't Photos in a library location".to_string())?;
+    let plan = lifecycle::plan_delete(&cat, &ids, scope).map_err(err)?;
+    let result = DeleteResult {
+        photos: plan.photos(),
+        files: plan.ops.iter().map(|o| o.files.len()).sum(),
+        bytes: plan.bytes(),
+        locked: plan.skipped.len(),
+    };
+    lifecycle::upstream::execute(&app, &mut cat, &plan)?;
+    let deletions: std::collections::HashSet<String> = paths.into_iter().collect();
+    crate::file_management::sync_album_path_changes(&app, None, Some(&deletions), None);
+    Ok(result)
 }

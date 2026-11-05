@@ -3019,6 +3019,8 @@ pub fn run() {
             pv::commands::pv_dates,
             pv::commands::pv_photo_detail,
             pv::commands::pv_photo_histogram,
+            pv::commands::pv_delete_preview,
+            pv::commands::pv_delete_photos,
             pv::commands::pv_list_images_for_path,
             pv::commands::pv_set_metadata,
         ])
