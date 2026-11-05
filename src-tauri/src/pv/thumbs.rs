@@ -24,6 +24,14 @@ use crate::pv::catalog::Catalog;
 
 /// The file the grid shows for a Photo.
 pub fn thumbnail_file(cat: &Catalog, photo_id: i64) -> Result<Option<PathBuf>> {
+    thumbnail_file_id(cat, photo_id)?
+        .map(|f| assets::file_path(cat, f))
+        .transpose()
+}
+
+/// Catalog id of the file the grid shows: the RAW (its camera preview), or the rendered display
+/// copy of an edited Photo, or the display copy when there's no RAW.
+pub fn thumbnail_file_id(cat: &Catalog, photo_id: i64) -> Result<Option<i64>> {
     let row: Option<(String, Option<i64>, Option<i64>)> = cat
         .conn()
         .query_row(
@@ -35,11 +43,10 @@ pub fn thumbnail_file(cat: &Catalog, photo_id: i64) -> Result<Option<PathBuf>> {
     let Some((state, representative, display)) = row else {
         return Ok(None);
     };
-    let file = match State::parse(&state) {
+    Ok(match State::parse(&state) {
         Some(State::Edited) => display.or(representative),
         _ => representative.or(display),
-    };
-    file.map(|f| assets::file_path(cat, f)).transpose()
+    })
 }
 
 /// A thumbnail from the cheap sources only (RAW preview, HEIF thumbnail, small JPEG), never a

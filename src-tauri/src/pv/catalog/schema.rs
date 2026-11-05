@@ -7,7 +7,7 @@
 //!   source of truth, so rows can always be rebuilt by a rescan.
 
 /// `MIGRATIONS[i]` upgrades the catalog from version `i` to version `i + 1`.
-pub const MIGRATIONS: &[&str] = &[V1];
+pub const MIGRATIONS: &[&str] = &[V1, V2];
 
 /// The schema version this build writes.
 pub const LATEST_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -135,4 +135,22 @@ CREATE TABLE ops_log (
     finished_at  INTEGER
 );
 CREATE INDEX ops_log_status ON ops_log(status);
+"#;
+
+const V2: &str = r#"
+-- Image statistics behind the RAW-value signals (M2-07), from the file the grid shows. Cached
+-- per source file version; the verdict itself is derived on request with ratings, flags, EXIF
+-- and the lock, so human input always counts at once.
+CREATE TABLE raw_signals (
+    photo_id       INTEGER PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+    source_file_id INTEGER NOT NULL,
+    source_mtime   INTEGER NOT NULL,
+    clipped        REAL    NOT NULL, -- share of pixels with a channel at the top (0..1)
+    shadows        REAL    NOT NULL, -- share of pixels near black (0..1)
+    luma_low       INTEGER NOT NULL, -- 1st percentile of luma (0..255)
+    luma_high      INTEGER NOT NULL, -- 99th percentile of luma (0..255)
+    red_blue       REAL    NOT NULL, -- mean R / mean B over mid-tones (gray-world white balance)
+    green_magenta  REAL    NOT NULL, -- mean G / mean (R+B)/2 over mid-tones
+    computed_at    INTEGER NOT NULL
+);
 "#;

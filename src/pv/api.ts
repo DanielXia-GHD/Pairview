@@ -235,6 +235,44 @@ export interface Undone {
   locations: number[];
 }
 
+export type Verdict = 'keepRaw' | 'yourCall' | 'hifEnough';
+
+export type RawValueChipKind =
+  | 'rated'
+  | 'picked'
+  | 'edited'
+  | 'highlightsClipped'
+  | 'shadowsCrushed'
+  | 'highContrast'
+  | 'warmLight'
+  | 'coolLight'
+  | 'greenTint'
+  | 'magentaTint'
+  | 'highIso'
+  | 'importantShoot'
+  | 'rejected'
+  | 'untouched'
+  | 'casualShoot'
+  | 'wellExposed';
+
+export interface RawValueChip {
+  kind: RawValueChipKind;
+  toward: 'keep' | 'drop';
+  value: number | null;
+}
+
+/** RAW-value recommendation (PRD §6.5). Recommends only. */
+export interface RawValue {
+  photoId: number;
+  verdict: Verdict;
+  /** Locked with K: rules never change it. */
+  locked: boolean;
+  /** Nobody rated, flagged or locked it. */
+  unconfirmed: boolean;
+  chips: RawValueChip[];
+  noImage: boolean;
+}
+
 export interface Purged {
   ops: number;
   files: number;
@@ -291,6 +329,8 @@ export const pvApi = {
   keepRawOnly: (photoIds: number[]) => invoke<number>('pv_keep_raw_only', { photoIds }),
   /** Undoes the most recent delete still in Recently Deleted; null when there is none. */
   undo: () => invoke<Undone | null>('pv_undo'),
+  /** Keep RAW / Your call / HIF is enough with reason chips. */
+  rawValue: (photoIds: number[]) => invoke<RawValue[]>('pv_raw_value', { photoIds }),
 };
 
 /**

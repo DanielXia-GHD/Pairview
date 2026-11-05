@@ -939,3 +939,18 @@ pub fn pv_undo(app: AppHandle, state: State<PvState>) -> Result<Option<lifecycle
     }
     Ok(undone)
 }
+
+// ---- RAW value (M2-07) ------------------------------------------------------------------------
+
+/// Keep RAW / Your call / HIF is enough, with reason chips. Computes missing image statistics
+/// first (cheap previews, 8 at a time). Recommends only; changes no files.
+#[tauri::command]
+pub fn pv_raw_value(
+    state: State<PvState>,
+    photo_ids: Vec<i64>,
+) -> Result<Vec<crate::pv::signals::RawValue>, String> {
+    let mut cat = state.writer().map_err(err)?;
+    crate::pv::signals::ensure_stats(&mut cat, &photo_ids).map_err(err)?;
+    crate::pv::signals::raw_values(&cat, &photo_ids, |_| crate::pv::signals::Intent::Normal)
+        .map_err(err)
+}

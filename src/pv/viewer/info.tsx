@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { formatBytes } from '../../utils/formatBytes';
-import { pvApi, type Histogram, type MemberFile, type PhotoDetail, type PhotoItem } from '../api';
+import { pvApi, type Histogram, type MemberFile, type PhotoDetail, type PhotoItem, type RawValue } from '../api';
 
 const STORAGE_KEY = 'pv.viewer.info';
 /** Waits this long before loading, so holding → doesn't queue a request per Photo. */
@@ -83,6 +83,22 @@ export default function InfoPanel({ photo }: { photo: PhotoItem }) {
     };
   }, [photo.id]);
 
+  // RAW value follows the owner's rating, flag and lock as they change them here.
+  const [rawValue, setRawValue] = useState<RawValue | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      pvApi
+        .rawValue([photo.id])
+        .then((v) => !cancelled && setRawValue(v[0] ?? null))
+        .catch(() => !cancelled && setRawValue(null));
+    }, LOAD_DELAY_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [photo.id, photo.rating, photo.flag, photo.keepRaw, photo.state]);
+
   // Until this Photo's detail arrives, the previous one stays up rather than flashing empty.
   const exif = detail?.exif;
   const files = (detail?.files ?? []).filter((f) => f.role !== 'sidecar');
@@ -136,6 +152,8 @@ export default function InfoPanel({ photo }: { photo: PhotoItem }) {
         {!exif && detail && <div className="text-white/50">{t('pv.info.noExif')}</div>}
       </Section>
 
+      {rawValue && rawValue.photoId === photo.id && <RawValueSection value={rawValue} />}
+
       <Section title={t('pv.info.files')}>
         {files.map((f) => (
           <FileRow key={f.path} file={f} />
@@ -153,6 +171,42 @@ export default function InfoPanel({ photo }: { photo: PhotoItem }) {
         {photo.guardMismatch && <div className="text-amber-300">{t('pv.info.guardMismatch')}</div>}
       </Section>
     </aside>
+  );
+}
+
+const VERDICT_STYLE: Record<RawValue['verdict'], string> = {
+  keepRaw: 'bg-emerald-500/25 text-emerald-200',
+  yourCall: 'bg-amber-500/25 text-amber-200',
+  hifEnough: 'bg-white/15 text-white/80',
+};
+
+/** Keep RAW / Your call / HIF is enough, with the reasons (PRD §6.5, M2-07). */
+function RawValueSection({ value }: { value: RawValue }) {
+  const { t } = useTranslation();
+  return (
+    <Section title={t('pv.rawValue.title')}>
+      <div className="flex items-center gap-2">
+        <span className={`rounded px-2 py-0.5 font-semibold ${VERDICT_STYLE[value.verdict]}`}>
+          {t(`pv.rawValue.verdict.${value.verdict}`)}
+        </span>
+        {value.locked && <span className="text-white/60">{t('pv.rawValue.locked')}</span>}
+      </div>
+      {value.chips.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {value.chips.map((c) => (
+            <span
+              key={c.kind}
+              className={`rounded-full px-2 py-0.5 text-[11px] ${
+                c.toward === 'keep' ? 'bg-emerald-500/15 text-emerald-200' : 'bg-white/10 text-white/70'
+              }`}
+            >
+              {t(`pv.rawValue.chip.${c.kind}`, { value: c.value })}
+            </span>
+          ))}
+        </div>
+      )}
+      {value.unconfirmed && <div className="text-white/50">{t('pv.rawValue.unconfirmed')}</div>}
+    </Section>
   );
 }
 

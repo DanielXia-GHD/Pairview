@@ -12,6 +12,7 @@ pub mod metadata;
 mod nas_check;
 pub mod queries;
 pub mod scan;
+pub mod signals;
 pub mod thumbs;
 pub mod viewer;
 pub mod xmp;

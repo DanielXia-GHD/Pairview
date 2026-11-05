@@ -270,6 +270,34 @@
       "nothing": "Nothing to undo",
       "done_one": "Undone: {{count}} file is back",
       "done_other": "Undone: {{count}} files are back"
+    },
+    "rawValue": {
+      "title": "RAW value",
+      "verdict": {
+        "keepRaw": "Keep RAW",
+        "yourCall": "Your call",
+        "hifEnough": "HIF is enough"
+      },
+      "locked": "Locked (K)",
+      "unconfirmed": "Suggestion only: not rated or confirmed yet",
+      "chip": {
+        "rated": "{{value}}★",
+        "picked": "Picked",
+        "edited": "Edited",
+        "highlightsClipped": "Highlights clipped {{value}}%",
+        "shadowsCrushed": "Shadows crushed {{value}}%",
+        "highContrast": "High contrast scene",
+        "warmLight": "Strong warm cast",
+        "coolLight": "Strong blue cast",
+        "greenTint": "Green tint",
+        "magentaTint": "Magenta tint",
+        "highIso": "ISO {{value}}",
+        "importantShoot": "Important shoot",
+        "rejected": "Rejected",
+        "untouched": "Untouched 30 days",
+        "casualShoot": "Casual shoot",
+        "wellExposed": "Well exposed"
+      }
     }
   }
 }
