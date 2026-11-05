@@ -62,6 +62,7 @@ pub fn setup(app: &AppHandle) -> Result<()> {
         watchers: Mutex::new(HashMap::new()),
     });
     let state = app.state::<PvState>();
+    purge_expired_in_background(state.catalog_path.clone());
     for location in locations {
         if let Err(e) = start_watcher(app, &state, &location) {
             log::warn!("Pairview: cannot watch {}: {e:#}", location.path.display());
@@ -662,4 +663,205 @@ pub fn pv_delete_photos(
     let deletions: std::collections::HashSet<String> = paths.into_iter().collect();
     crate::file_management::sync_album_path_changes(&app, None, Some(&deletions), None);
     Ok(result)
+}
+
+// ---- Recently Deleted (M2-04) -----------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedPhotoInfo {
+    /// Index in the operation's manifest; the preview URL and restore use it.
+    pub index: usize,
+    pub stem: String,
+    pub shoot: String,
+    pub captured_at: Option<String>,
+    pub rating: i64,
+    /// File names still in Recently Deleted.
+    pub files: Vec<String>,
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedOpInfo {
+    pub op_id: String,
+    pub reason: lifecycle::Reason,
+    pub created_at: i64,
+    pub expires_at: Option<i64>,
+    pub bytes: u64,
+    pub photos: Vec<DeletedPhotoInfo>,
+    /// Files that weren't part of a Photo (folder deletes, unindexed files).
+    pub loose_files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedLocation {
+    pub location_id: i64,
+    pub name: String,
+    pub status: Status,
+    pub ops: Vec<DeletedOpInfo>,
+}
+
+fn deleted_op_info(op: lifecycle::DeletedOp) -> DeletedOpInfo {
+    let m = op.manifest;
+    let mut photos: Vec<DeletedPhotoInfo> = Vec::new();
+    let mut loose_files = Vec::new();
+    for f in &m.files {
+        let name = f.path.rsplit('/').next().unwrap_or(&f.path).to_string();
+        match f.photo.and_then(|i| m.photos.get(i).map(|p| (i, p))) {
+            Some((index, p)) => match photos.iter_mut().find(|x| x.index == index) {
+                Some(x) => {
+                    x.files.push(name);
+                    x.bytes += f.size;
+                }
+                None => photos.push(DeletedPhotoInfo {
+                    index,
+                    stem: p.stem.clone(),
+                    shoot: p.shoot.clone(),
+                    captured_at: p.captured_at.clone(),
+                    rating: p.rating,
+                    files: vec![name],
+                    bytes: f.size,
+                }),
+            },
+            None => loose_files.push(f.path.clone()),
+        }
+    }
+    DeletedOpInfo {
+        op_id: m.op_id.clone(),
+        reason: m.reason,
+        created_at: m.created_at,
+        expires_at: op.expires_at,
+        bytes: op.bytes,
+        photos,
+        loose_files,
+    }
+}
+
+/// Recently Deleted of every location, newest operation first. Offline locations are listed
+/// without operations.
+#[tauri::command]
+pub fn pv_recently_deleted(state: State<PvState>) -> Result<Vec<DeletedLocation>, String> {
+    let mut cat = state.writer().map_err(err)?;
+    let mounts = locations::mounts();
+    let mut out = Vec::new();
+    for location in locations::list(&cat).map_err(err)? {
+        let status = locations::status(&location, &mounts);
+        let ops = if status.is_online() {
+            match lifecycle::list(&mut cat, location.id) {
+                Ok(ops) => ops.into_iter().map(deleted_op_info).collect(),
+                Err(e) => {
+                    log::warn!("Pairview: Recently Deleted of {}: {e:#}", location.name);
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+        out.push(DeletedLocation {
+            location_id: location.id,
+            name: location.name,
+            status,
+            ops,
+        });
+    }
+    Ok(out)
+}
+
+/// Puts an operation's files back: all of them, or only those of the Photos `photos` (manifest
+/// indexes) and the loose files `files`.
+#[tauri::command]
+pub fn pv_restore_deleted(
+    app: AppHandle,
+    state: State<PvState>,
+    location_id: i64,
+    op_id: String,
+    photos: Option<Vec<usize>>,
+    files: Option<Vec<String>>,
+) -> Result<lifecycle::Restored, String> {
+    let mut cat = state.writer().map_err(err)?;
+    let only: Option<Vec<String>> = if photos.is_none() && files.is_none() {
+        None
+    } else {
+        let op = lifecycle::list(&mut cat, location_id)
+            .map_err(err)?
+            .into_iter()
+            .find(|o| o.manifest.op_id == op_id)
+            .ok_or_else(|| format!("{op_id} is no longer in Recently Deleted"))?;
+        let photos = photos.unwrap_or_default();
+        let files = files.unwrap_or_default();
+        Some(
+            op.manifest
+                .files
+                .iter()
+                .filter(|f| f.photo.is_some_and(|i| photos.contains(&i)) || files.contains(&f.path))
+                .map(|f| f.path.clone())
+                .collect(),
+        )
+    };
+    let restored =
+        lifecycle::restore(&mut cat, location_id, &op_id, only.as_deref()).map_err(err)?;
+    let _ = app.emit(
+        FOLDER_CHANGED_EVENT,
+        watch::FolderChanged {
+            location_id,
+            folders: Vec::new(),
+            shoots: Vec::new(),
+        },
+    );
+    Ok(restored)
+}
+
+/// Empty now: permanently deletes Recently Deleted of one location (or every online one),
+/// limited to `op_ids` when given. Only files the manifests list are deleted.
+#[tauri::command]
+pub fn pv_empty_deleted(
+    state: State<PvState>,
+    location_id: Option<i64>,
+    op_ids: Option<Vec<String>>,
+) -> Result<lifecycle::Purged, String> {
+    let mut cat = state.writer().map_err(err)?;
+    let mounts = locations::mounts();
+    let mut total = lifecycle::Purged::default();
+    for location in locations::list(&cat).map_err(err)? {
+        if location_id.is_some_and(|id| id != location.id)
+            || !locations::status(&location, &mounts).is_online()
+        {
+            continue;
+        }
+        let p = lifecycle::purge(&mut cat, location.id, None, op_ids.as_deref()).map_err(err)?;
+        total.ops += p.ops;
+        total.files += p.files;
+        total.bytes += p.bytes;
+    }
+    Ok(total)
+}
+
+/// The 30-day purge of every online location (PRD D12). Runs once at startup, in the background.
+fn purge_expired_in_background(catalog_path: PathBuf) {
+    std::thread::spawn(move || {
+        let run = || -> Result<()> {
+            let mut cat = Catalog::open(&catalog_path)?;
+            let mounts = locations::mounts();
+            for location in locations::list(&cat)? {
+                if !locations::status(&location, &mounts).is_online() {
+                    continue;
+                }
+                let p = lifecycle::purge_expired(&mut cat, location.id, catalog::now_ms())?;
+                if p.ops > 0 {
+                    log::info!(
+                        "Pairview: purged {} file(s), {} bytes older than 30 days from {}",
+                        p.files,
+                        p.bytes,
+                        location.name
+                    );
+                }
+            }
+            Ok(())
+        };
+        if let Err(e) = run() {
+            log::warn!("Pairview: 30-day purge: {e:#}");
+        }
+    });
 }

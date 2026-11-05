@@ -9,6 +9,7 @@ import Text from '../../components/ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { onFolderChanged, pvApi, type FolderNode, type LocationInfo } from '../api';
 import PvDatesTree from './PvDatesTree';
+import { RecentlyDeletedEntry } from '../deleted/RecentlyDeleted';
 
 interface PvLibraryTreeProps {
   onFolderSelect(path: string): void;
@@ -115,6 +116,7 @@ export default function PvLibraryTree({ onFolderSelect, selectedPath }: PvLibrar
         )}
       </div>
       <PvDatesTree onSelect={onFolderSelect} selectedPath={selectedPath} />
+      <RecentlyDeletedEntry onRestored={() => selectedPath && onFolderSelect(selectedPath)} />
     </>
   );
 }

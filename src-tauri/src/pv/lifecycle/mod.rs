@@ -511,6 +511,31 @@ pub fn purge_expired(cat: &mut Catalog, location_id: i64, now: i64) -> Result<Pu
     purge(cat, location_id, Some(now - RETENTION_MS), None)
 }
 
+/// The file to preview Photo `photo` (manifest index) of operation `op_id` with: its display copy,
+/// else its RAW. Reads only.
+pub fn preview_file(location_root: &Path, op_id: &str, photo: usize) -> Result<PathBuf> {
+    let op_dir = location_root.join(op_dir_rel(op_id)?);
+    let manifest = Manifest::read(&op_dir)?;
+    let mut files: Vec<&ManifestFile> = manifest
+        .files
+        .iter()
+        .filter(|f| f.photo == Some(photo) && f.role != "sidecar")
+        .collect();
+    files.sort_by_key(|f| match f.role.as_str() {
+        "display" => 0,
+        "extra" => 1,
+        "raw" => 2,
+        _ => 3,
+    });
+    for f in files {
+        let path = safe_join(&op_dir, &f.path)?;
+        if fs::symlink_metadata(&path).is_ok_and(|m| m.is_file()) {
+            return Ok(path);
+        }
+    }
+    bail!("nothing to preview for Photo {photo} of {op_id}")
+}
+
 // ---- Op-log replay ----------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Default, Serialize)]

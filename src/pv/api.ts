@@ -190,6 +190,56 @@ export interface DeleteResult {
   locked: number;
 }
 
+/** Why files are in Recently Deleted (PRD §6.6). */
+export type DeleteReason = 'deleted' | 'slimmed' | 'replaced';
+
+export interface DeletedPhoto {
+  /** Index in the operation's manifest (preview URL, restore). */
+  index: number;
+  stem: string;
+  shoot: string;
+  capturedAt: string | null;
+  rating: number;
+  files: string[];
+  bytes: number;
+}
+
+export interface DeletedOp {
+  opId: string;
+  reason: DeleteReason;
+  createdAt: number;
+  expiresAt: number | null;
+  bytes: number;
+  photos: DeletedPhoto[];
+  looseFiles: string[];
+}
+
+export interface DeletedLocation {
+  locationId: number;
+  name: string;
+  status: LocationStatus;
+  ops: DeletedOp[];
+}
+
+export interface Restored {
+  files: number;
+  /** Original paths taken again by a new file; those stay in Recently Deleted. */
+  conflicts: string[];
+}
+
+export interface Purged {
+  ops: number;
+  files: number;
+  bytes: number;
+}
+
+/** Base of the `pvimg` scheme (Windows serves custom schemes over http). */
+export const PVIMG_BASE = navigator.userAgent.includes('Windows') ? 'http://pvimg.localhost' : 'pvimg://localhost';
+
+/** A small JPEG of a Photo in Recently Deleted. */
+export const deletedPreviewUrl = (locationId: number, opId: string, index: number) =>
+  `${PVIMG_BASE}/deleted/${locationId}/${opId}/${index}`;
+
 export const pvApi = {
   locations: {
     list: () => invoke<LocationInfo[]>('pv_locations_list'),
@@ -218,6 +268,12 @@ export const pvApi = {
   deletePreview: (photoIds: number[]) => invoke<DeletePreview>('pv_delete_preview', { photoIds }),
   /** Moves to Recently Deleted (30 days). `paths` are grid paths. */
   deletePhotos: (paths: string[], scope: DeleteScope) => invoke<DeleteResult>('pv_delete_photos', { paths, scope }),
+  recentlyDeleted: () => invoke<DeletedLocation[]>('pv_recently_deleted'),
+  /** Puts files back: the whole operation, or only some Photos (manifest indexes) / loose files. */
+  restoreDeleted: (locationId: number, opId: string, photos?: number[], files?: string[]) =>
+    invoke<Restored>('pv_restore_deleted', { locationId, opId, photos, files }),
+  /** Empty now. Permanent: only files listed in Recently Deleted manifests are deleted. */
+  emptyDeleted: (locationId?: number, opIds?: string[]) => invoke<Purged>('pv_empty_deleted', { locationId, opIds }),
 };
 
 /**

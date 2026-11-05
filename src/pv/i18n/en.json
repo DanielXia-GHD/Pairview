@@ -207,6 +207,39 @@
         "hint": "Choose “Ask every time” to bring the delete dialog back.",
         "ask": "Ask every time"
       }
+    },
+    "deleted": {
+      "title": "Recently Deleted",
+      "subtitle": "{{size}} · kept for 30 days, then deleted for good",
+      "reason": {
+        "deleted": "Deleted",
+        "slimmed": "Slimmed RAWs",
+        "replaced": "Replaced originals"
+      },
+      "items_one": "{{count}} item",
+      "items_other": "{{count}} items",
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "daysLeft_one": "deleted for good in {{count}} day",
+      "daysLeft_other": "deleted for good in {{count}} days",
+      "restoreAll": "Restore all",
+      "restoreSelected_one": "Restore {{count}} photo",
+      "restoreSelected_other": "Restore {{count}} photos",
+      "restored_one": "Restored {{count}} file",
+      "restored_other": "Restored {{count}} files",
+      "conflicts_one": "{{count}} file stayed in Recently Deleted: a new file has its name",
+      "conflicts_other": "{{count}} files stayed in Recently Deleted: new files have their names",
+      "emptyNow": "Empty now",
+      "emptyTitle": "Empty Recently Deleted?",
+      "emptyMessage_one": "{{count}} file ({{size}}) will be deleted for good. This can't be undone.",
+      "emptyMessage_other": "{{count}} files ({{size}}) will be deleted for good. This can't be undone.",
+      "emptyConfirm": "Delete for good",
+      "emptied_one": "Deleted {{count}} file for good ({{size}})",
+      "emptied_other": "Deleted {{count}} files for good ({{size}})",
+      "empty": "Nothing in Recently Deleted.",
+      "loading": "Loading…",
+      "offline": "{{name}} is offline; its Recently Deleted shows when it's connected.",
+      "close": "Close"
     }
   }
 }

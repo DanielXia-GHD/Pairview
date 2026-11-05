@@ -916,3 +916,43 @@ fn grid_paths_map_to_photos_only_when_all_are_photos() {
             .is_none()
     );
 }
+
+// ---- M2-04: Recently Deleted view ----
+
+#[test]
+fn preview_prefers_the_display_copy() {
+    let mut f = Fixture::new(SHOOT);
+    let done = f.delete(&[f.photo("dsc0001")], Scope::Photo).unwrap();
+    let path = preview_file(&f.root, &done.op_id, 0).unwrap();
+    assert!(
+        path.ends_with("2026-10-23_1/hif/DSC0001.HIF"),
+        "{}",
+        path.display()
+    );
+    assert!(path.starts_with(f.root.join(TRASH_DIR)));
+    assert!(preview_file(&f.root, &done.op_id, 5).is_err());
+    assert!(preview_file(&f.root, "../../etc", 0).is_err());
+}
+
+#[test]
+fn restoring_one_photo_of_an_operation_keeps_the_rest() {
+    let mut f = Fixture::new(SHOOT);
+    let photos = [f.photo("dsc0001"), f.photo("dsc0002")];
+    let done = f.delete(&photos, Scope::Photo).unwrap();
+    let op = list(&mut f.cat, f.location).unwrap().pop().unwrap();
+    let second: Vec<String> = op
+        .manifest
+        .files
+        .iter()
+        .filter(|x| x.photo == Some(1))
+        .map(|x| x.path.clone())
+        .collect();
+    restore(&mut f.cat, f.location, &done.op_id, Some(&second)).unwrap();
+    assert_eq!(f.library().len(), 2);
+    let left = list(&mut f.cat, f.location).unwrap().pop().unwrap();
+    assert_eq!(left.manifest.files.len(), 5);
+    // Indexes still point at the right Photos, so previews keep working.
+    assert_eq!(left.manifest.photos.len(), 2);
+    assert!(preview_file(&f.root, &done.op_id, 0).is_ok());
+    assert!(preview_file(&f.root, &done.op_id, 1).is_err());
+}

@@ -57,6 +57,14 @@ fn parse(path: &str, query: Option<&str>) -> Option<Target> {
 }
 
 fn serve(app: &AppHandle, request: &Request<Vec<u8>>) -> Result<(Vec<u8>, &'static str)> {
+    if let Some(rest) = request
+        .uri()
+        .path()
+        .trim_start_matches('/')
+        .strip_prefix("deleted/")
+    {
+        return serve_deleted(app, rest);
+    }
     let target = parse(request.uri().path(), request.uri().query())
         .ok_or_else(|| anyhow!("expected /photo/<id>"))?;
     let state = app.state::<PvState>();
@@ -83,6 +91,34 @@ fn serve(app: &AppHandle, request: &Request<Vec<u8>>) -> Result<(Vec<u8>, &'stat
         }
         (None, None) => Err(anyhow!("Photo {} has no files", target.photo_id)),
     }
+}
+
+/// Long edge of Recently Deleted previews.
+const DELETED_PREVIEW_PX: u32 = 480;
+
+/// `deleted/<location id>/<op id>/<photo index>`: a small JPEG of a Photo in Recently Deleted.
+/// The file comes from that operation's manifest, never from the URL.
+fn serve_deleted(app: &AppHandle, rest: &str) -> Result<(Vec<u8>, &'static str)> {
+    let mut parts = rest.trim_end_matches('/').split('/');
+    let (Some(location), Some(op_id), Some(index), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return Err(anyhow!("expected /deleted/<location>/<op>/<photo>"));
+    };
+    let location_id: i64 = location.parse()?;
+    let index: usize = index.parse()?;
+    let state = app.state::<PvState>();
+    let root = state.read(|cat| {
+        crate::pv::locations::get(cat, location_id)?
+            .map(|l| l.path)
+            .ok_or_else(|| anyhow!("location {location_id} not found"))
+    })?;
+    let path = crate::pv::lifecycle::preview_file(&root, op_id, index)?;
+    let image = crate::pv::thumbs::quick_thumbnail(&path, DELETED_PREVIEW_PX)
+        .or_else(|| image::open(&path).ok())
+        .context("no preview")?;
+    let image = image.thumbnail(DELETED_PREVIEW_PX, DELETED_PREVIEW_PX);
+    Ok((jpeg(&image)?, "image/jpeg"))
 }
 
 /// Long edge of the image the histogram is computed from.
