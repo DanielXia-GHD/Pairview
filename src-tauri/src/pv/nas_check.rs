@@ -37,8 +37,9 @@ mod tests {
             "PV_NAS should be the NAS"
         );
         let mut cat = Catalog::open_in_memory().unwrap();
-        let count =
-            |cat: &Catalog, sql: &str| -> i64 { cat.conn().query_row(sql, [], |r| r.get(0)).unwrap() };
+        let count = |cat: &Catalog, sql: &str| -> i64 {
+            cat.conn().query_row(sql, [], |r| r.get(0)).unwrap()
+        };
 
         // Identity of the share (what a location is recognised by after a remount).
         let identity = locations::identify(root).unwrap();
@@ -76,7 +77,9 @@ mod tests {
                  GROUP BY f.id ORDER BY f.rel_path",
             )
             .unwrap();
-        println!("shoot | photos | pairs | edited | raw only | display only | orphans | mismatch | RAW files");
+        println!(
+            "shoot | photos | pairs | edited | raw only | display only | orphans | mismatch | RAW files"
+        );
         let rows: Vec<(String, Vec<i64>)> = stmt
             .query_map([], |r| {
                 Ok((

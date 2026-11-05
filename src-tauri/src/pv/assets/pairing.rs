@@ -156,7 +156,12 @@ fn attach_sidecars(files: &[FileRef], photos: &mut [PlannedPhoto]) {
             .find(|f| f.id == id)
             .map(|f| f.name.to_lowercase())
     };
-    let stem_of = |id: i64| files.iter().find(|f| f.id == id).map(|f| f.stem_key.as_str());
+    let stem_of = |id: i64| {
+        files
+            .iter()
+            .find(|f| f.id == id)
+            .map(|f| f.stem_key.as_str())
+    };
     let members = |p: &PlannedPhoto| {
         [p.raw, p.display]
             .into_iter()
@@ -314,9 +319,9 @@ mod tests {
             run(&[
                 "DSC0001.ARW",
                 "DSC00012.ARW",
-                "DSC00012.JPG",   // exact match, not DSC0001 + "2"
-                "DSC0001-1.JPG",  // not digits only
-                "DSC0001x12.JPG", // not digits only
+                "DSC00012.JPG",      // exact match, not DSC0001 + "2"
+                "DSC0001-1.JPG",     // not digits only
+                "DSC0001x12.JPG",    // not digits only
                 "DSC0001234567.JPG", // 5+ digits after DSC00012 / DSC0001
                 "IMG1234.JPG",
             ]),

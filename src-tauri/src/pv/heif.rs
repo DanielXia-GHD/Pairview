@@ -57,8 +57,8 @@ mod imp {
     use objc2_image_io::{
         CGImageDestination, CGImageSource, kCGImageDestinationLossyCompressionQuality,
         kCGImagePropertyDepth, kCGImagePropertyOrientation,
-        kCGImageSourceCreateThumbnailFromImageAlways, kCGImageSourceCreateThumbnailFromImageIfAbsent,
-        kCGImageSourceCreateThumbnailWithTransform,
+        kCGImageSourceCreateThumbnailFromImageAlways,
+        kCGImageSourceCreateThumbnailFromImageIfAbsent, kCGImageSourceCreateThumbnailWithTransform,
         kCGImageSourceShouldCache, kCGImageSourceThumbnailMaxPixelSize,
     };
     use rawler::Orientation;

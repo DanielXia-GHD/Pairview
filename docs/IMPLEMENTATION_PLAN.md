@@ -134,7 +134,7 @@ These refine PRD §8 and are binding unless changed here.
 
 | ID | Task | Tier | Depends |
 |---|---|---|---|
-| `[ ] M2-01` | `pv/lifecycle` core: op-log (write-ahead), Recently Deleted layout + manifest (A8), restore, purge (30 days), same-volume check, offline refusal 🛡 | O | M1-04 |
+| `[x] M2-01` | `pv/lifecycle` core: op-log (write-ahead), Recently Deleted layout + manifest (A8), restore, purge (30 days), same-volume check, offline refusal 🛡. Done: `pv/lifecycle/{mod,plan,manifest}.rs`; Photo-level plan (Delete photo / Keep HIF only / Keep RAW only, lock and guard-split aware, Photo XMP copied next to the kept copy); rename-only moves; crash → rollback replay at startup and before each operation; one operation at a time; purge only manifest-listed files. Safety suite §4.3 1–6 in `lifecycle/tests.rs`, plus a `PV_FIXTURES` round trip on a copy of a real shoot. Self-reviewed at Opus/High | O | M1-04 |
 | `[ ] M2-02` | Route upstream delete commands through lifecycle (A7 hook) 🛡 | O | M2-01 |
 | `[ ] M2-03` | Delete dialog (Delete photo / Keep HIF only / Keep RAW only + "don't ask again") and global setting (PRD §6.6) | S | M2-02 |
 | `[ ] M2-04` | Recently Deleted view grouped by reason; Restore; Empty now | S | M2-01 |

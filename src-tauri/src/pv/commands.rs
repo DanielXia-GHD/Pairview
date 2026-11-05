@@ -44,7 +44,15 @@ pub fn setup(app: &AppHandle) -> Result<()> {
     let dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&dir)?;
     let catalog_path = dir.join(catalog::FILE_NAME);
-    let reader = Catalog::open(&catalog_path)?;
+    let mut reader = Catalog::open(&catalog_path)?;
+    // Operations a crash left half done are put back before anything else touches files.
+    match crate::pv::lifecycle::recover(&mut reader) {
+        Ok(r) if r.rolled_back + r.failed + r.waiting > 0 => {
+            log::warn!("Pairview: op-log replay: {r:?}")
+        }
+        Ok(_) => {}
+        Err(e) => log::error!("Pairview: op-log replay failed: {e:#}"),
+    }
     let locations = locations::list(&reader)?;
     app.manage(PvState {
         catalog_path,

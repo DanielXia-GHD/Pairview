@@ -6,6 +6,7 @@ pub mod catalog;
 pub mod commands;
 pub mod exif_read;
 pub mod heif;
+pub mod lifecycle;
 pub mod locations;
 pub mod metadata;
 mod nas_check;
