@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { pvPhotoForPath } from '../store';
 import type { DeleteScope, PhotoItem } from '../api';
+import { refuseIfOffline } from '../offline';
 
 /** What Delete does on a RAW+display Photo: ask, or one of the three choices. */
 export type DeleteDefault = 'ask' | DeleteScope;
@@ -60,6 +61,8 @@ export function pvPhotosFor(paths: string[]): PhotoItem[] | null {
 export async function chooseDelete(paths: string[], withAssociated: boolean): Promise<DeleteScope | 'cancel' | null> {
   const photos = pvPhotosFor(paths);
   if (!photos) return null;
+  // Offline: nothing can change there (M2-10).
+  if (refuseIfOffline(paths)) return 'cancel';
   // "Delete with associated files" is upstream's own whole-Photo delete, already confirmed.
   if (withAssociated) return 'photo';
   const remembered = loadDeleteDefault();

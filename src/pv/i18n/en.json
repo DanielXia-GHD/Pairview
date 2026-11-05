@@ -333,6 +333,11 @@
       "suggestionOnly": "Suggestion only",
       "dropBadge": "Drop RAW",
       "close": "Close"
+    },
+    "offline": {
+      "badge": "{{name}} offline · read-only",
+      "hint": "Thumbnails and details come from the catalog. Ratings, deletes and other changes wait until the location is connected.",
+      "refused": "{{name}} is offline. Nothing was changed; connect it and try again."
     }
   }
 }

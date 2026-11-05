@@ -8,6 +8,7 @@ import { pvApi, type KeepRaw } from '../api';
 import { pvPhotosFor } from '../delete/choose';
 import { usePvPhotoStore } from '../store';
 import { usePvViewer } from '../viewer/PvViewer';
+import { refuseIfOffline } from '../offline';
 
 const KEEP_CYCLE: KeepRaw[] = ['auto', 'keep', 'drop'];
 
@@ -24,6 +25,7 @@ export function onGridKey(e: KeyboardEvent) {
   // Upstream binds K to its AI panel; in the library a Pairview selection takes it.
   e.preventDefault();
   e.stopImmediatePropagation();
+  if (refuseIfOffline(photos.map((p) => p.representativePath ?? p.displayPath))) return;
   const next = KEEP_CYCLE[(KEEP_CYCLE.indexOf(photos[0].keepRaw) + 1) % KEEP_CYCLE.length];
   void (async () => {
     try {

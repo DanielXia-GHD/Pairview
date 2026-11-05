@@ -30,6 +30,7 @@ import { pvPhotosFor } from '../delete/choose';
 import { toastDeleted } from '../delete/undo';
 import { usePvPhotoStore } from '../store';
 import { usePvViewer } from '../viewer/PvViewer';
+import { refuseIfOffline } from '../offline';
 
 const VERDICTS: Verdict[] = ['hifEnough', 'yourCall', 'keepRaw'];
 
@@ -59,6 +60,7 @@ export function onSlimKey(e: KeyboardEvent) {
   if (photos.length === 0) return;
   e.preventDefault();
   e.stopImmediatePropagation();
+  if (refuseIfOffline(photos.map((p) => p.representativePath ?? p.displayPath))) return;
   useSlim.setState({ review: { title: '', photos } });
 }
 

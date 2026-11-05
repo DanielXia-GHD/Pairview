@@ -9,6 +9,7 @@ import Text from '../../components/ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../types/typography';
 import { onFolderChanged, pvApi, type FolderNode, type LocationInfo } from '../api';
 import PvDatesTree from './PvDatesTree';
+import { usePvLocations, watchLocations } from '../offline';
 import { RecentlyDeletedEntry } from '../deleted/RecentlyDeleted';
 import { OrphanBanner } from '../orphans/OrphanReview';
 import { ReadyToSlimEntry } from '../slim/SlimReview';
@@ -60,6 +61,7 @@ export default function PvLibraryTree({ onFolderSelect, selectedPath }: PvLibrar
     try {
       const list = await pvApi.locations.list();
       setLocations(list);
+      usePvLocations.setState({ locations: list });
       await Promise.all(list.map((l) => loadTree(l.id)));
     } catch {
       setLocations([]);
@@ -67,6 +69,7 @@ export default function PvLibraryTree({ onFolderSelect, selectedPath }: PvLibrar
   }, [loadTree]);
 
   useEffect(() => {
+    watchLocations();
     void loadAll();
     const unlisten = onFolderChanged((change) => void loadTree(change.locationId));
     return () => void unlisten.then((stop) => stop());
