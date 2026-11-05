@@ -57,7 +57,8 @@ mod imp {
     use objc2_image_io::{
         CGImageDestination, CGImageSource, kCGImageDestinationLossyCompressionQuality,
         kCGImagePropertyDepth, kCGImagePropertyOrientation,
-        kCGImageSourceCreateThumbnailFromImageIfAbsent, kCGImageSourceCreateThumbnailWithTransform,
+        kCGImageSourceCreateThumbnailFromImageAlways, kCGImageSourceCreateThumbnailFromImageIfAbsent,
+        kCGImageSourceCreateThumbnailWithTransform,
         kCGImageSourceShouldCache, kCGImageSourceThumbnailMaxPixelSize,
     };
     use rawler::Orientation;
@@ -203,23 +204,30 @@ mod imp {
         Ok(oriented)
     }
 
-    /// Fast thumbnail: uses the embedded preview when it is large enough, orientation applied.
+    /// Fast thumbnail, orientation applied: from the embedded preview when that is at least
+    /// `max_px` on the long edge (Sony: ~1620 px), otherwise rendered from the full image.
     pub fn heif_thumbnail(bytes: &[u8], max_px: u32) -> Result<DynamicImage> {
         let source = open_source(bytes)?;
         let max = CFNumber::new_i32(max_px as i32);
-        let opts = options(&[
-            (
-                unsafe { kCGImageSourceCreateThumbnailFromImageIfAbsent },
-                CFBoolean::new(true),
-            ),
-            (
-                unsafe { kCGImageSourceCreateThumbnailWithTransform },
-                CFBoolean::new(true),
-            ),
-            (unsafe { kCGImageSourceThumbnailMaxPixelSize }, &max),
-        ]);
-        let image = unsafe { source.thumbnail_at_index(0, Some(opts.as_opaque())) }
+        let thumbnail = |from_image: &CFString| {
+            let opts = options(&[
+                (from_image, CFBoolean::new(true)),
+                (
+                    unsafe { kCGImageSourceCreateThumbnailWithTransform },
+                    CFBoolean::new(true),
+                ),
+                (unsafe { kCGImageSourceThumbnailMaxPixelSize }, &max),
+            ]);
+            unsafe { source.thumbnail_at_index(0, Some(opts.as_opaque())) }
+        };
+        let mut image = thumbnail(unsafe { kCGImageSourceCreateThumbnailFromImageIfAbsent })
             .ok_or_else(|| anyhow!("ImageIO could not create a HEIF thumbnail"))?;
+        if CGImage::width(Some(&image)).max(CGImage::height(Some(&image))) < max_px as usize {
+            // The embedded preview is too small: ImageIO renders from the full image instead.
+            if let Some(full) = thumbnail(unsafe { kCGImageSourceCreateThumbnailFromImageAlways }) {
+                image = full;
+            }
+        }
         let rgba16 = draw_rgba16(&image)?;
         Ok(DynamicImage::ImageRgb8(
             DynamicImage::ImageRgba16(rgba16).to_rgb8(),
@@ -317,6 +325,9 @@ mod tests {
             start.elapsed()
         );
         assert_eq!(thumb.width().max(thumb.height()), 1280);
+        // Bigger than the embedded preview: rendered from the full image (viewer JPEG fallback).
+        let big = heif_thumbnail(&bytes, 4096).unwrap();
+        assert_eq!(big.width().max(big.height()), 4096);
         // Orientation must agree between the full decode and the thumbnail.
         assert_eq!(full.width() > full.height(), thumb.width() > thumb.height());
     }

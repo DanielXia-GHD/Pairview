@@ -1,6 +1,24 @@
 //! Groups a shoot's files into Photos by basename (PRD §5.3). Pure: no I/O.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Longest counter a phone/transfer app appends to the camera's name: `DSC07714` → `DSC07714439.jpg`.
+const MAX_SUFFIX_DIGITS: usize = 4;
+
+/// The RAW stem a display copy belongs to: its own stem when a RAW has it, else the longest RAW
+/// stem it starts with followed only by 1–4 digits (`dsc07714439` → `dsc07714`). The timestamp
+/// guard still checks the pair, so a wrong guess is split again once EXIF is read.
+fn display_key<'a>(stem: &'a str, raw_stems: &BTreeSet<&'a str>) -> &'a str {
+    if raw_stems.contains(stem) {
+        return stem;
+    }
+    (1..=MAX_SUFFIX_DIGITS.min(stem.len().saturating_sub(1)))
+        .map(|n| stem.split_at(stem.len() - n))
+        .find(|(prefix, suffix)| {
+            suffix.bytes().all(|b| b.is_ascii_digit()) && raw_stems.contains(prefix)
+        })
+        .map_or(stem, |(prefix, _)| prefix)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -61,11 +79,20 @@ fn display_rank(ext: &str) -> u8 {
 /// Plans the Photos of one shoot. `guard(raw, display)` reports whether a pair's timestamps
 /// agree; a mismatch splits the pair into two Photos, both flagged.
 pub fn plan(files: &[FileRef], guard: impl Fn(i64, i64) -> Guard) -> Vec<PlannedPhoto> {
+    let raw_stems: BTreeSet<&str> = files
+        .iter()
+        .filter(|f| f.kind == Kind::Raw)
+        .map(|f| f.stem_key.as_str())
+        .collect();
     let mut by_stem: BTreeMap<&str, (Vec<&FileRef>, Vec<&FileRef>)> = BTreeMap::new();
     for f in files {
         match f.kind {
             Kind::Raw => by_stem.entry(&f.stem_key).or_default().0.push(f),
-            Kind::Display => by_stem.entry(&f.stem_key).or_default().1.push(f),
+            Kind::Display => by_stem
+                .entry(display_key(&f.stem_key, &raw_stems))
+                .or_default()
+                .1
+                .push(f),
             Kind::Sidecar => {}
         }
     }
@@ -120,14 +147,22 @@ pub fn plan(files: &[FileRef], guard: impl Fn(i64, i64) -> Guard) -> Vec<Planned
     photos
 }
 
-/// `DSC0001.xmp` belongs to the Photo `dsc0001`. `DSC0001.ARW.rrdata` / `DSC0001.ARW.xmp`
-/// belong to the Photo that has the file `DSC0001.ARW`.
+/// `DSC0001.xmp` belongs to the Photo with a file named `DSC0001.*`. `DSC0001.ARW.rrdata` /
+/// `DSC0001.ARW.xmp` belong to the Photo that has the file `DSC0001.ARW`.
 fn attach_sidecars(files: &[FileRef], photos: &mut [PlannedPhoto]) {
     let name_of = |id: i64| {
         files
             .iter()
             .find(|f| f.id == id)
             .map(|f| f.name.to_lowercase())
+    };
+    let stem_of = |id: i64| files.iter().find(|f| f.id == id).map(|f| f.stem_key.as_str());
+    let members = |p: &PlannedPhoto| {
+        [p.raw, p.display]
+            .into_iter()
+            .chain(p.extras.iter().copied().map(Some))
+            .flatten()
+            .collect::<Vec<_>>()
     };
     for sidecar in files.iter().filter(|f| f.kind == Kind::Sidecar) {
         // RapidRAW virtual copies: `DSC0001.ARW.0a1b2c.rrdata` belongs to `DSC0001.ARW`.
@@ -142,16 +177,22 @@ fn attach_sidecars(files: &[FileRef], photos: &mut [PlannedPhoto]) {
         let owner = photos
             .iter()
             .position(|p| {
-                [p.raw, p.display]
+                members(p)
                     .into_iter()
-                    .chain(p.extras.iter().copied().map(Some))
-                    .flatten()
                     .any(|id| name_of(id).as_deref() == Some(file_key.as_str()))
             })
             .or_else(|| {
                 // A bare-stem XMP describes the whole Photo; with a guard split it goes with
                 // the RAW, where Lightroom/Capture One put it too.
                 photos.iter().position(|p| p.stem_key == sidecar.stem_key)
+            })
+            .or_else(|| {
+                // `DSC07714439.xmp` next to a suffixed JPG that paired with `DSC07714.ARW`.
+                photos.iter().position(|p| {
+                    members(p)
+                        .into_iter()
+                        .any(|id| stem_of(id) == Some(sidecar.stem_key.as_str()))
+                })
             });
         if let Some(i) = owner {
             photos[i].sidecars.push(sidecar.id);
@@ -245,6 +286,58 @@ mod tests {
             [
                 "DSC0001.ARW DSC0001.HIF +DSC0001.ARW.rrdata +DSC0001.HIF.rrdata +DSC0001.ARW.0a1b2c.rrdata +DSC0001.xmp"
             ]
+        );
+    }
+
+    #[test]
+    fn display_copy_with_a_transfer_counter_pairs_with_its_raw() {
+        // Older shoots on the NAS: JPGs got a counter appended after the camera number.
+        assert_eq!(
+            run(&[
+                "DSC07714.ARW",
+                "DSC07714.xmp",
+                "DSC07714439.jpg",
+                "DSC037651136.jpg",
+                "DSC03765.ARW",
+                "DSC037651136.xmp",
+            ]),
+            [
+                "DSC03765.ARW DSC037651136.jpg +DSC037651136.xmp",
+                "DSC07714.ARW DSC07714439.jpg +DSC07714.xmp"
+            ]
+        );
+    }
+
+    #[test]
+    fn exact_names_win_and_only_digits_count_as_a_counter() {
+        assert_eq!(
+            run(&[
+                "DSC0001.ARW",
+                "DSC00012.ARW",
+                "DSC00012.JPG",   // exact match, not DSC0001 + "2"
+                "DSC0001-1.JPG",  // not digits only
+                "DSC0001x12.JPG", // not digits only
+                "DSC0001234567.JPG", // 5+ digits after DSC00012 / DSC0001
+                "IMG1234.JPG",
+            ]),
+            [
+                "DSC0001.ARW -",
+                "- DSC0001-1.JPG",
+                "DSC00012.ARW DSC00012.JPG",
+                "- DSC0001234567.JPG",
+                "- DSC0001x12.JPG",
+                "- IMG1234.JPG"
+            ]
+        );
+    }
+
+    #[test]
+    fn suffixed_pair_is_still_guarded() {
+        let f = files(&["DSC07714.ARW", "DSC07714439.jpg"]);
+        let photos = plan(&f, |_, _| Guard::Mismatch);
+        assert_eq!(
+            summary(&photos, &f),
+            ["DSC07714.ARW - !", "- DSC07714439.jpg !"]
         );
     }
 

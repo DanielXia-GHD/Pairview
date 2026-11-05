@@ -4,7 +4,9 @@
 //! Work is ordered for a fast first impression: shoots in the order given (the opened folder
 //! first), and within that, one file per Photo (its representative) before the remaining
 //! members. The second pass feeds the timestamp guard, which `assets::rebuild_shoot` applies.
-//! Reads run 8 at a time, each reading only the start of its file (`pv::exif_read`).
+//! Within a pass, files from all shoots share one queue, read 16 at a time (NAS reads are
+//! latency-bound, ~40 ms each), each reading only the start of its file (`pv::exif_read`).
+//! Results are stored, and their shoots re-derived, every `CHUNK` files.
 //!
 //! Results are cached per file mtime: a file is read again only when it changes.
 
@@ -21,7 +23,9 @@ use crate::pv::assets;
 use crate::pv::catalog::{Catalog, now_ms};
 use crate::pv::exif_read::{ExifInfo, read_exif};
 
-const PARALLEL_READS: usize = 8;
+const PARALLEL_READS: usize = 16;
+/// Files read between catalog writes: the date view fills in as the index runs.
+const CHUNK: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pass {
@@ -39,6 +43,7 @@ pub struct L1Stats {
 }
 
 struct Job {
+    shoot: i64,
     file_id: i64,
     mtime: i64,
     path: PathBuf,
@@ -55,27 +60,46 @@ fn pool() -> &'static rayon::ThreadPool {
     })
 }
 
-/// Runs both passes over `shoots`, in priority order.
+/// Runs both passes over `shoots`; within a pass, files are queued in shoot priority order.
 pub fn run(cat: &mut Catalog, shoots: &[i64]) -> Result<L1Stats> {
     let mut stats = L1Stats::default();
     for pass in [Pass::Representative, Pass::Members] {
+        let mut jobs = Vec::new();
         for &shoot in shoots {
-            let s = run_pass(cat, shoot, pass)?;
-            stats.files_read += s.files_read;
-            stats.files_failed += s.files_failed;
-            stats.bytes_read += s.bytes_read;
+            jobs.extend(pending(cat, shoot, pass)?);
         }
+        stats.add(&run_jobs(cat, jobs)?);
     }
     Ok(stats)
 }
 
-/// One pass over one shoot: read what's missing or stale, store it, and re-derive the shoot's
-/// Photos (capture times, guard splits). Writes nothing when nothing needed reading.
+/// One pass over one shoot.
 pub fn run_pass(cat: &mut Catalog, shoot: i64, pass: Pass) -> Result<L1Stats> {
     let jobs = pending(cat, shoot, pass)?;
-    if jobs.is_empty() {
-        return Ok(L1Stats::default());
+    run_jobs(cat, jobs)
+}
+
+impl L1Stats {
+    fn add(&mut self, other: &L1Stats) {
+        self.files_read += other.files_read;
+        self.files_failed += other.files_failed;
+        self.bytes_read += other.bytes_read;
     }
+}
+
+/// Reads `jobs` in chunks; after each, stores the results and re-derives the touched shoots'
+/// Photos (capture times, guard splits). Writes nothing when nothing needed reading.
+fn run_jobs(cat: &mut Catalog, jobs: Vec<Job>) -> Result<L1Stats> {
+    let mut stats = L1Stats::default();
+    let mut jobs = jobs.into_iter().peekable();
+    while jobs.peek().is_some() {
+        let chunk: Vec<Job> = jobs.by_ref().take(CHUNK).collect();
+        stats.add(&run_chunk(cat, chunk)?);
+    }
+    Ok(stats)
+}
+
+fn run_chunk(cat: &mut Catalog, jobs: Vec<Job>) -> Result<L1Stats> {
     // An I/O error (NAS gone) stores nothing, so the file is tried again later. A file that
     // reads fine but has no EXIF is stored as such and not read again until it changes.
     let results: Vec<(Job, Option<ExifInfo>)> = pool().install(|| {
@@ -88,6 +112,7 @@ pub fn run_pass(cat: &mut Catalog, shoot: i64, pass: Pass) -> Result<L1Stats> {
     });
 
     let mut stats = L1Stats::default();
+    let mut touched: Vec<i64> = Vec::new();
     let tx = cat.conn_mut().transaction()?;
     let now = now_ms();
     for (job, info) in results {
@@ -97,6 +122,9 @@ pub fn run_pass(cat: &mut Catalog, shoot: i64, pass: Pass) -> Result<L1Stats> {
         };
         stats.files_read += 1;
         stats.bytes_read += info.bytes_read;
+        if !touched.contains(&job.shoot) {
+            touched.push(job.shoot);
+        }
         tx.execute(
             "INSERT OR REPLACE INTO exif (file_id, file_mtime, date_original, subsec_ms,
                  offset_original, make, model, serial, lens, orientation, width, height, iso,
@@ -127,7 +155,7 @@ pub fn run_pass(cat: &mut Catalog, shoot: i64, pass: Pass) -> Result<L1Stats> {
             ],
         )?;
     }
-    if stats.files_read > 0 {
+    for shoot in touched {
         assets::rebuild_shoot(&tx, shoot)?;
     }
     tx.commit()?;
@@ -162,6 +190,7 @@ fn pending(cat: &Catalog, shoot: i64, pass: Pass) -> Result<Vec<Job>> {
             }
             path.push(r.get::<_, String>(4)?);
             Ok(Job {
+                shoot,
                 file_id: r.get(0)?,
                 mtime: r.get(1)?,
                 path,

@@ -8,6 +8,7 @@ pub mod exif_read;
 pub mod heif;
 pub mod locations;
 pub mod metadata;
+mod nas_check;
 pub mod queries;
 pub mod scan;
 pub mod thumbs;
