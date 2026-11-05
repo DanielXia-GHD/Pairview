@@ -305,6 +305,34 @@
       "casual": "Casual",
       "normal": "Normal",
       "important": "Important"
+    },
+    "slim": {
+      "ready": "Ready to slim",
+      "readySubtitle": "Shoots older than 30 days with RAW + HIF pairs · up to {{size}}",
+      "pairs_one": "{{count}} pair",
+      "pairs_other": "{{count}} pairs",
+      "upTo": "up to {{size}}",
+      "reviewTitle": "selection",
+      "reviewOf": "Review for slimming: {{name}}",
+      "reviewSubtitle": "Selected RAWs go to Recently Deleted for 30 days; their HIF or JPG stays. Click a photo to change it.",
+      "analysing_one": "Checking {{count}} photo…",
+      "analysing_other": "Checking {{count}} photos…",
+      "emptyTab": "No photos here.",
+      "apply_one": "Drop {{count}} RAW · {{size}}",
+      "apply_other": "Drop {{count}} RAWs · {{size}}",
+      "applyTitle_one": "Drop {{count}} RAW?",
+      "applyTitle_other": "Drop {{count}} RAWs?",
+      "applyMessage_one": "{{count}} RAW ({{size}}) and its edits go to Recently Deleted for 30 days. The HIF or JPG stays.",
+      "applyMessage_other": "{{count}} RAWs ({{size}}) and their edits go to Recently Deleted for 30 days. The HIFs and JPGs stay.",
+      "applyConfirm": "Drop RAWs",
+      "applied_one": "Moved {{count}} RAW to Recently Deleted ({{size}})",
+      "applied_other": "Moved {{count}} RAWs to Recently Deleted ({{size}})",
+      "skipped_one": "{{count}} photo was left alone (locked, or its edit needs rendering first)",
+      "skipped_other": "{{count}} photos were left alone (locked, or their edits need rendering first)",
+      "done": "Done, keep the rest",
+      "suggestionOnly": "Suggestion only",
+      "dropBadge": "Drop RAW",
+      "close": "Close"
     }
   }
 }

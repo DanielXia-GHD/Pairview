@@ -281,6 +281,30 @@ export interface RawValue {
   noImage: boolean;
 }
 
+export interface ReadyShoot {
+  folderId: number;
+  locationId: number;
+  name: string;
+  path: string;
+  date: string;
+  pairs: number;
+  rawBytes: number;
+}
+
+export interface SlimItem {
+  value: RawValue;
+  /** What dropping this RAW frees. */
+  rawBytes: number;
+}
+
+export type SkipReason = 'gone' | 'noRaw' | 'noDisplay' | 'locked' | 'needsRender';
+
+export interface SlimResult {
+  photos: number;
+  bytes: number;
+  skipped: { photoId: number; reason: SkipReason }[];
+}
+
 export interface Purged {
   ops: number;
   files: number;
@@ -344,6 +368,13 @@ export const pvApi = {
   /** Writes `.pairview-shoot.json` in the shoot folder. */
   setShootIntent: (folderId: number, intent: ShootIntentValue) =>
     invoke<void>('pv_set_shoot_intent', { folderId, intent }),
+  /** Shoots past the 30-day grace period with pairs to review. */
+  slimReady: () => invoke<ReadyShoot[]>('pv_slim_ready'),
+  slimReview: (args: { shootId?: number; photoIds?: number[] }) => invoke<SlimItem[]>('pv_slim_review', args),
+  /** Apply: the chosen Photos' RAWs go to Recently Deleted; `reviewedShoots` leave Ready to slim. */
+  slimApply: (photoIds: number[], reviewedShoots: number[]) =>
+    invoke<SlimResult>('pv_slim_apply', { photoIds, reviewedShoots }),
+  slimMarkReviewed: (shootId: number) => invoke<void>('pv_slim_mark_reviewed', { shootId }),
 };
 
 /**

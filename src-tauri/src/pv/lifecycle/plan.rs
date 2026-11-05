@@ -40,6 +40,9 @@ pub enum SkipReason {
     NoDisplay,
     /// Keep HIF only on a Photo with the Keep-RAW lock (`K`).
     Locked,
+    /// Keep HIF only on an edited Photo whose recipe is newer than its rendered display copy:
+    /// render it first, or the edit is lost (PRD §6.5).
+    NeedsRender,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -101,6 +104,7 @@ struct Member {
     folder: String,
     name: String,
     size: u64,
+    mtime: i64,
 }
 
 impl Member {
@@ -464,6 +468,9 @@ impl Builder {
             How::Scope(Scope::KeepDisplay) if !has_raw => Some(SkipReason::NoRaw),
             How::Scope(Scope::KeepDisplay) if !has_display => Some(SkipReason::NoDisplay),
             How::Scope(Scope::KeepDisplay) if info.keep_raw == "keep" => Some(SkipReason::Locked),
+            How::Scope(Scope::KeepDisplay) if needs_render(&info, &members, &primaries) => {
+                Some(SkipReason::NeedsRender)
+            }
             How::Scope(Scope::KeepRaw) if !has_raw => Some(SkipReason::NoRaw),
             How::Scope(Scope::KeepRaw) if !has_display => Some(SkipReason::NoDisplay),
             _ => None,
@@ -553,10 +560,29 @@ impl Builder {
     }
 }
 
+/// An edited Photo whose RAW recipe (`.rrdata`) changed after its display copy was rendered.
+fn needs_render(info: &PhotoInfo, members: &[Member], primaries: &[&Member]) -> bool {
+    if info.state != "edited" {
+        return false;
+    }
+    let rendered = primaries
+        .iter()
+        .filter(|m| m.role == "display")
+        .map(|m| m.mtime)
+        .max()
+        .unwrap_or(i64::MAX);
+    members.iter().any(|m| {
+        m.name.to_lowercase().ends_with(".rrdata")
+            && owner(m, primaries).is_some_and(|o| o.role == "raw")
+            && m.mtime > rendered
+    })
+}
+
 struct PhotoInfo {
     location_id: i64,
     shoot_id: i64,
     keep_raw: String,
+    state: String,
     manifest: ManifestPhoto,
 }
 
@@ -565,7 +591,7 @@ fn photo_info(cat: &Catalog, photo_id: i64) -> Result<Option<PhotoInfo>> {
         .conn()
         .query_row(
             "SELECT d.location_id, p.shoot_folder_id, d.rel_path, p.stem_key, p.captured_at,
-                    COALESCE(md.keep_raw, 'auto'), COALESCE(md.rating, 0)
+                    COALESCE(md.keep_raw, 'auto'), COALESCE(md.rating, 0), p.state
              FROM photos p JOIN folders d ON d.id = p.shoot_folder_id
              LEFT JOIN metadata md ON md.photo_id = p.id
              WHERE p.id = ?1",
@@ -575,6 +601,7 @@ fn photo_info(cat: &Catalog, photo_id: i64) -> Result<Option<PhotoInfo>> {
                     location_id: r.get(0)?,
                     shoot_id: r.get(1)?,
                     keep_raw: r.get(5)?,
+                    state: r.get(7)?,
                     manifest: ManifestPhoto {
                         shoot: r.get(2)?,
                         stem: r.get(3)?,
@@ -589,7 +616,7 @@ fn photo_info(cat: &Catalog, photo_id: i64) -> Result<Option<PhotoInfo>> {
 
 fn members(cat: &Catalog, photo_id: i64) -> Result<Vec<Member>> {
     let mut stmt = cat.conn().prepare_cached(
-        "SELECT f.id, m.role, d.rel_path, f.name, f.size
+        "SELECT f.id, m.role, d.rel_path, f.name, f.size, f.mtime
          FROM photo_members m JOIN files f ON f.id = m.file_id JOIN folders d ON d.id = f.folder_id
          WHERE m.photo_id = ?1
          ORDER BY CASE m.role WHEN 'raw' THEN 0 WHEN 'display' THEN 1 WHEN 'extra' THEN 2 ELSE 3 END,
@@ -603,6 +630,7 @@ fn members(cat: &Catalog, photo_id: i64) -> Result<Vec<Member>> {
                 folder: r.get(2)?,
                 name: r.get(3)?,
                 size: r.get::<_, i64>(4)?.max(0) as u64,
+                mtime: r.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;

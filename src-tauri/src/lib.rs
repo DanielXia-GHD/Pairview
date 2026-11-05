@@ -3030,6 +3030,10 @@ pub fn run() {
             pv::commands::pv_raw_value,
             pv::commands::pv_shoot_intent,
             pv::commands::pv_set_shoot_intent,
+            pv::commands::pv_slim_ready,
+            pv::commands::pv_slim_review,
+            pv::commands::pv_slim_apply,
+            pv::commands::pv_slim_mark_reviewed,
             pv::commands::pv_list_images_for_path,
             pv::commands::pv_set_metadata,
         ])

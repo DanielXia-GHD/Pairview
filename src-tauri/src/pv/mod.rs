@@ -14,6 +14,7 @@ mod nas_check;
 pub mod queries;
 pub mod scan;
 pub mod signals;
+pub mod slim;
 pub mod thumbs;
 pub mod viewer;
 pub mod xmp;

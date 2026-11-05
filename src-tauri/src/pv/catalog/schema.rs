@@ -7,7 +7,7 @@
 //!   source of truth, so rows can always be rebuilt by a rescan.
 
 /// `MIGRATIONS[i]` upgrades the catalog from version `i` to version `i + 1`.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4];
 
 /// The schema version this build writes.
 pub const LATEST_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -159,4 +159,10 @@ const V3: &str = r#"
 -- Shoot intent (M2-08): Casual / Normal / Important, set by the owner (AI guess in M4). Mirrors
 -- `<shoot>/.pairview-shoot.json`, which is the record on disk; NULL = not read yet.
 ALTER TABLE folders ADD COLUMN intent TEXT CHECK (intent IN ('casual', 'normal', 'important'));
+"#;
+
+const V4: &str = r#"
+-- When the owner last finished a slim review of the shoot (M2-09), so Ready to slim stops
+-- listing it. Mirrors `.pairview-shoot.json` like `intent`.
+ALTER TABLE folders ADD COLUMN slim_reviewed_at INTEGER;
 "#;

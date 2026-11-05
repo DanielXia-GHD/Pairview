@@ -11,6 +11,7 @@ import { onFolderChanged, pvApi, type FolderNode, type LocationInfo } from '../a
 import PvDatesTree from './PvDatesTree';
 import { RecentlyDeletedEntry } from '../deleted/RecentlyDeleted';
 import { OrphanBanner } from '../orphans/OrphanReview';
+import { ReadyToSlimEntry } from '../slim/SlimReview';
 
 interface PvLibraryTreeProps {
   onFolderSelect(path: string): void;
@@ -123,6 +124,12 @@ export default function PvLibraryTree({ onFolderSelect, selectedPath }: PvLibrar
         )}
       </div>
       <PvDatesTree onSelect={onFolderSelect} selectedPath={selectedPath} />
+      <ReadyToSlimEntry
+        onChanged={() => {
+          void loadAll();
+          if (selectedPath) onFolderSelect(selectedPath);
+        }}
+      />
       <RecentlyDeletedEntry onRestored={() => selectedPath && onFolderSelect(selectedPath)} />
     </>
   );

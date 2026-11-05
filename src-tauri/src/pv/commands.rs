@@ -1003,3 +1003,74 @@ pub fn pv_set_shoot_intent(
     let cat = state.writer().map_err(err)?;
     crate::pv::intent::set(&cat, folder_id, intent).map_err(err)
 }
+
+// ---- Slimming (M2-09) -------------------------------------------------------------------------
+
+/// Ready to slim: shoots past the 30-day grace period with RAW+display pairs, not yet reviewed.
+#[tauri::command]
+pub fn pv_slim_ready(state: State<PvState>) -> Result<Vec<crate::pv::slim::ReadyShoot>, String> {
+    state
+        .read(|cat| crate::pv::slim::ready(cat, chrono::Local::now().date_naive()))
+        .map_err(err)
+}
+
+/// Review items (verdict, chips, RAW size) for a shoot or for chosen Photos.
+#[tauri::command]
+pub fn pv_slim_review(
+    state: State<PvState>,
+    shoot_id: Option<i64>,
+    photo_ids: Option<Vec<i64>>,
+) -> Result<Vec<crate::pv::slim::SlimItem>, String> {
+    let mut cat = state.writer().map_err(err)?;
+    let ids = match (shoot_id, photo_ids) {
+        (_, Some(ids)) => ids,
+        (Some(shoot), None) => crate::pv::slim::shoot_photos(&cat, shoot).map_err(err)?,
+        (None, None) => return Ok(Vec::new()),
+    };
+    crate::pv::slim::review(&mut cat, &ids).map_err(err)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SlimResult {
+    pub photos: usize,
+    pub bytes: u64,
+    /// Photos left alone, with why (locked, needs a render, no longer a pair).
+    pub skipped: Vec<lifecycle::plan::Skipped>,
+}
+
+/// Apply on the review screen: the chosen Photos' RAWs go to Recently Deleted ("Slimmed RAWs").
+/// `reviewed_shoots` are marked done so Ready to slim stops listing them.
+#[tauri::command]
+pub fn pv_slim_apply(
+    app: AppHandle,
+    state: State<PvState>,
+    photo_ids: Vec<i64>,
+    reviewed_shoots: Vec<i64>,
+) -> Result<SlimResult, String> {
+    let mut cat = state.writer().map_err(err)?;
+    let plan =
+        lifecycle::plan_photos(&cat, &photo_ids, lifecycle::Scope::KeepDisplay).map_err(err)?;
+    let result = SlimResult {
+        photos: plan.photos(),
+        bytes: plan.bytes(),
+        skipped: plan.skipped.clone(),
+    };
+    if !plan.ops.is_empty() {
+        lifecycle::upstream::execute(&app, &mut cat, &plan)?;
+    }
+    let now = catalog::now_ms();
+    for shoot in reviewed_shoots {
+        if let Err(e) = crate::pv::intent::mark_slim_reviewed(&cat, shoot, now) {
+            log::warn!("Pairview: shoot {shoot} not marked reviewed: {e:#}");
+        }
+    }
+    Ok(result)
+}
+
+/// "Done" on a review without dropping anything: Ready to slim stops listing the shoot.
+#[tauri::command]
+pub fn pv_slim_mark_reviewed(state: State<PvState>, shoot_id: i64) -> Result<(), String> {
+    let cat = state.writer().map_err(err)?;
+    crate::pv::intent::mark_slim_reviewed(&cat, shoot_id, catalog::now_ms()).map_err(err)
+}
