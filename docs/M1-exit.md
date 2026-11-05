@@ -34,15 +34,14 @@ Throughput stays at 4–10 MB/s whatever the thread count. Each file costs a fix
 
 ## Owner walkthrough
 
+Owner, 2026-11-04: quick pass in the dev app, "looks good". Done on the single-shoot location (`2026-10-31_10561031`), not the whole DCIM root.
+
 | Step | Result |
 |---|---|
-| Add `/Volumes/Public/Photos/A/DCIM` as a location | |
-| Browse tree | |
-| Date view | |
-| View and rate 50 photos | |
-| Slideshow | |
-| Ratings in `.xmp` and in RapidRAW's editor | |
-| Memory (Activity Monitor) | |
+| Add `/Volumes/Public/Photos/A/DCIM` as a location | Not done in the app; the whole root was scanned, paired and indexed by `nas_check.rs` (above) |
+| Browse tree, date view, view and rate, slideshow | ✅ on the single shoot |
+| Ratings in `.xmp` and in RapidRAW's editor | ✅ (owner quick pass) |
+| Memory (Activity Monitor) | Not measured with the whole root; recheck when it is added |
 
 ## Fix list
 

@@ -124,7 +124,7 @@ These refine PRD §8 and are binding unless changed here.
 | `[x] M1-17` | **Translation keys + UI text** for all M1 strings (English; other locales fall back to English) | H | M1-10..16 | `src/pv/i18n/*` | No hard-coded UI strings in `src/pv` (lint rule or grep check). Done: `npm run pv:i18n-check` (`src/pv/i18n/check.mjs`, TypeScript AST: JSX text, visible attributes, and missing `pv.*` keys); upstream's `i18next/no-literal-string` reports nothing under this ESLint version. Decision (2026-11-04, owner): English only. No other locales are written or maintained; Pairview text stays in keys only to keep it in one place, and backend messages / non-English branding are not worked on |
 
 ### 6.3 M1 exit
-- `[ ] M1-18` **Exit check (O):** owner-style walkthrough on the real NAS: add location → browse tree → date view → view/rate 50 photos → slideshow → ratings visible in XMP and in RapidRAW's editor. Performance numbers recorded against PRD §9. Fix list triaged.
+- `[x] M1-18` **Exit check (O):** owner-style walkthrough on the real NAS: add location → browse tree → date view → view/rate 50 photos → slideshow → ratings visible in XMP and in RapidRAW's editor. Performance numbers recorded against PRD §9. Fix list triaged. Done (2026-11-04): results in `docs/M1-exit.md`. Owner walkthrough on a single NAS shoot location; the whole DCIM root was scanned, paired and indexed by `nas_check.rs` (headless), not added in the app. L1 first run 15 min accepted (NAS per-file latency).
 
 **M1 critical path:** M0-05 → M1-01 → M1-04 → M1-09 → M1-12 → M1-14. Parallelizable: M1-02/03 (after 01), M1-06, M1-07, M1-08, and M1-10/11 (after 09).
 
