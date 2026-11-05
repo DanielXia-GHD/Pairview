@@ -24,6 +24,7 @@ pub mod manifest;
 pub mod plan;
 #[cfg(test)]
 mod tests;
+pub mod upstream;
 
 use std::fs;
 use std::io;

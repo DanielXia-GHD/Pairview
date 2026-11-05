@@ -26,7 +26,7 @@ pub struct PvState {
 }
 
 impl PvState {
-    fn writer(&self) -> Result<Catalog> {
+    pub(crate) fn writer(&self) -> Result<Catalog> {
         Catalog::open(&self.catalog_path)
     }
 

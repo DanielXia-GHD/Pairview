@@ -635,7 +635,7 @@ fn real_shoot_round_trip() {
         fs::create_dir_all(to.parent().unwrap()).unwrap();
         fs::copy(source.join(&rel), to).unwrap();
     }
-    let mut cat = Catalog::open_in_memory().unwrap();
+    let cat = Catalog::open_in_memory().unwrap();
     let location = locations::add(&cat, &root, Some("Copy")).unwrap();
     let mut f = Fixture {
         _tmp: tmp,
@@ -644,7 +644,6 @@ fn real_shoot_round_trip() {
         location,
     };
     f.rescan();
-    let loc = locations::get(&f.cat, f.location).unwrap().unwrap();
     let shoots: Vec<i64> = {
         let mut s = f
             .cat
@@ -657,7 +656,6 @@ fn real_shoot_round_trip() {
             .unwrap()
     };
     crate::pv::scan::l1::run(&mut f.cat, &shoots).unwrap();
-    drop(loc);
     let before = f.library();
     let pairs: Vec<i64> = {
         let mut s = f
@@ -725,4 +723,137 @@ fn real_shoot_round_trip() {
         purged.bytes as f64 / 1e6
     );
     assert!(!f.root.join(TRASH_DIR).read_dir().unwrap().any(|_| true));
+}
+
+// ---- M2-02: RapidRAW's delete commands ----
+
+impl Fixture {
+    fn abs(&self, rel: &str) -> PathBuf {
+        self.root.join(rel)
+    }
+
+    fn delete_paths(&mut self, rels: &[&str], whole: bool) -> (Plan, Vec<PathBuf>) {
+        let paths: Vec<PathBuf> = rels.iter().map(|r| self.abs(r)).collect();
+        let (plan, outside) = plan::plan_paths_with(&self.cat, &paths, whole).unwrap();
+        for (_, r) in apply(&mut self.cat, &plan) {
+            r.unwrap();
+        }
+        (plan, outside)
+    }
+}
+
+#[test]
+fn deleting_the_raw_file_is_keep_display() {
+    let mut f = Fixture::new(SHOOT);
+    let (plan, _) = f.delete_paths(&["2026-10-23_1/arw/DSC0001.ARW"], false);
+    assert_eq!(plan.ops[0].kind, "drop_raw");
+    let lib = f.library();
+    assert!(lib.contains_key("2026-10-23_1/hif/DSC0001.HIF"));
+    assert!(lib.contains_key("2026-10-23_1/hif/DSC0001.xmp"));
+    assert!(!lib.contains_key("2026-10-23_1/arw/DSC0001.ARW"));
+}
+
+#[test]
+fn deleting_both_files_or_with_associated_is_the_whole_photo() {
+    let mut f = Fixture::new(SHOOT);
+    f.delete_paths(
+        &[
+            "2026-10-23_1/arw/DSC0001.ARW",
+            "2026-10-23_1/hif/DSC0001.HIF",
+        ],
+        false,
+    );
+    f.delete_paths(&["2026-10-23_1/arw/DSC0002.ARW"], true);
+    assert!(f.library().is_empty(), "{:?}", f.library().keys());
+}
+
+#[test]
+fn deleting_the_display_file_is_keep_raw() {
+    let mut f = Fixture::new(SHOOT);
+    let (plan, _) = f.delete_paths(&["2026-10-23_1/hif/DSC0001.HIF"], false);
+    assert_eq!(plan.ops[0].kind, "delete");
+    let lib = f.library();
+    assert!(lib.contains_key("2026-10-23_1/arw/DSC0001.ARW"));
+    assert!(lib.contains_key("2026-10-23_1/arw/DSC0001.xmp"));
+    assert!(!lib.contains_key("2026-10-23_1/hif/DSC0001.HIF.rrdata"));
+}
+
+#[test]
+fn deleting_a_locked_raw_is_refused() {
+    let f = Fixture::new(SHOOT);
+    f.cat
+        .conn()
+        .execute(
+            "INSERT INTO metadata (photo_id, keep_raw, updated_at) VALUES (?1, 'keep', 0)",
+            [f.photo("dsc0001")],
+        )
+        .unwrap();
+    let paths = [f.abs("2026-10-23_1/arw/DSC0001.ARW")];
+    let (plan, _) = plan::plan_paths(&f.cat, &paths).unwrap();
+    assert!(plan.ops.is_empty());
+    assert_eq!(plan.skipped[0].reason, SkipReason::Locked);
+}
+
+#[test]
+fn a_virtual_copy_goes_alone() {
+    let mut files = SHOOT.to_vec();
+    files.push("2026-10-23_1/arw/DSC0001.ARW.0a1b2c.rrdata");
+    let mut f = Fixture::new(&files);
+    let before = f.library();
+    f.delete_paths(&["2026-10-23_1/arw/DSC0001.ARW.0a1b2c.rrdata"], false);
+    let mut expected = before.clone();
+    expected.remove("2026-10-23_1/arw/DSC0001.ARW.0a1b2c.rrdata");
+    assert_eq!(f.library(), expected);
+}
+
+#[test]
+fn paths_outside_locations_are_handed_back() {
+    let f = Fixture::new(SHOOT);
+    let elsewhere = f.root.parent().unwrap().join("elsewhere/x.jpg");
+    let paths = [elsewhere.clone(), f.abs("2026-10-23_1/arw/DSC0002.ARW")];
+    let (plan, outside) = plan::plan_paths(&f.cat, &paths).unwrap();
+    assert_eq!(outside, [elsewhere]);
+    assert_eq!(plan.photos(), 1);
+    assert_eq!(plan::outside_locations(&f.cat, &paths).unwrap().len(), 1);
+}
+
+#[test]
+fn unindexed_file_in_a_location_still_goes_to_recently_deleted() {
+    let mut f = Fixture::new(SHOOT);
+    fs::write(f.abs("2026-10-23_1/notes.txt"), b"n").unwrap();
+    f.delete_paths(&["2026-10-23_1/notes.txt"], false);
+    assert!(
+        f.trash()
+            .keys()
+            .any(|k| k.ends_with("2026-10-23_1/notes.txt"))
+    );
+}
+
+#[test]
+fn deleting_a_folder_moves_everything_under_it_and_restores() {
+    let mut f = Fixture::new(SHOOT);
+    fs::write(f.abs("2026-10-23_1/notes.txt"), b"n").unwrap();
+    let before = f.library();
+    let plan = plan::plan_folder(&f.cat, &f.abs("2026-10-23_1"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(plan.ops.len(), 1);
+    assert_eq!(plan.ops[0].files.len(), 8);
+    assert_eq!(plan.photos(), 2);
+    let done = apply(&mut f.cat, &plan).pop().unwrap().1.unwrap();
+    assert!(f.library().is_empty());
+    assert_eq!(f.photos_in_catalog(), 0);
+
+    restore(&mut f.cat, f.location, &done.op_id, None).unwrap();
+    assert_eq!(f.library(), before);
+}
+
+#[test]
+fn folder_delete_refuses_the_location_root_and_recently_deleted() {
+    let f = Fixture::new(SHOOT);
+    assert!(plan::plan_folder(&f.cat, &f.root).is_err());
+    fs::create_dir_all(f.root.join(TRASH_DIR).join("x")).unwrap();
+    assert!(plan::plan_folder(&f.cat, &f.root.join(TRASH_DIR).join("x")).is_err());
+    let outside = f.root.parent().unwrap().to_path_buf();
+    assert!(plan::plan_folder(&f.cat, &outside).unwrap().is_none());
 }

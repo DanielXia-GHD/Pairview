@@ -982,7 +982,8 @@ pub fn add_to_album(
     Ok(())
 }
 
-fn sync_album_path_changes(
+// PV: pub(crate) so pv/lifecycle can keep albums in step when it takes over a delete.
+pub(crate) fn sync_album_path_changes(
     app_handle: &AppHandle,
     renames: Option<&HashMap<String, String>>,
     deletions: Option<&HashSet<String>>,
@@ -2479,6 +2480,10 @@ pub fn rename_folder(path: String, new_name: String, app_handle: AppHandle) -> R
 
 #[tauri::command]
 pub fn delete_folder(path: String, app_handle: AppHandle) -> Result<(), String> {
+    // PV: a folder inside a Pairview location goes to its Recently Deleted (A7).
+    if crate::pv::lifecycle::upstream::take_over_folder(&app_handle, &path)? {
+        return Ok(());
+    }
     #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
     {
         if let Err(trash_error) = trash::delete(&path) {
@@ -3828,6 +3833,8 @@ pub fn show_in_finder(path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn delete_files_from_disk(paths: Vec<String>, app_handle: AppHandle) -> Result<(), String> {
     let paths = crate::immich::trash_remote(&app_handle, paths, false)?;
+    // PV: files inside Pairview locations go to its Recently Deleted (A7), not the OS trash.
+    let paths = crate::pv::lifecycle::upstream::take_over_delete(&app_handle, paths, false)?;
     let mut files_to_trash = HashSet::new();
     let mut deletions = HashSet::new();
 
@@ -3933,6 +3940,8 @@ pub fn delete_files_with_associated(
     app_handle: AppHandle,
 ) -> Result<(), String> {
     let paths = crate::immich::trash_remote(&app_handle, paths, true)?;
+    // PV: Photos inside Pairview locations go to its Recently Deleted (A7), not the OS trash.
+    let paths = crate::pv::lifecycle::upstream::take_over_delete(&app_handle, paths, true)?;
     if paths.is_empty() {
         return Ok(());
     }
