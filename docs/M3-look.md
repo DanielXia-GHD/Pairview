@@ -8,6 +8,8 @@ A 33-point 3D LUT that turns RapidRAW's neutral render of an A7C II RAW into wha
 PV_LOOK_DIR=/path/to/lookfit cargo test --lib pv::look_job -- --nocapture
 ```
 
+Set up the folder with `scripts/pv-sample-look-pairs.py` (pairs) and `scripts/look-neutral.json` (saved there as `neutral.json`: RapidRAW's default recipe). `PV_LOOK_DIR` must not contain `..`, because RapidRAW's LUT loader rejects such paths.
+
 **Result on the 12 held-out pairs** (CIEDE2000; about 1 is barely visible side by side, 2–3 noticeable if you look for it):
 
 | | Neutral render | With My Sony |
