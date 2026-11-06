@@ -24,6 +24,7 @@ Found and fixed by this check:
 |---|---|
 | Delete, restore, slim on the NAS | Owner present (plan M2-11); the share mounted |
 | Owner check of the M2-05 to M2-10 screens in the app | Owner |
+| Smoke test of the upstream merge `47cdc439` (view, edit, delete, restore) | Owner |
 | `rename()` and listing speed for a large operation on SMB | The NAS run above |
 
 Headless runs can't cover: the screens themselves, SMB behaviour, and Recently Deleted on a share where the user can't create dot-folders.

@@ -22,6 +22,7 @@ import { TextColors, TextVariants, TextWeights } from '../../../types/typography
 import { useLibraryStore } from '../../../store/useLibraryStore';
 import { useSettingsStore } from '../../../store/useSettingsStore';
 import { findGroupVariants, getVariantLabel } from '../../../utils/imageGrouping';
+import PvDoneButton from '../../../pv/edit/PvDoneButton'; // PV: Done
 
 const COMPARE_MODES = [
   { mode: 'toggle', icon: Eye, label: 'editor.compare.toggle' },
@@ -486,6 +487,8 @@ const EditorToolbar = memo(
         </div>
 
         <div className="flex items-center gap-2 shrink-0 z-40">
+          {/* PV: Done renders the edit and replaces the display copy */}
+          <PvDoneButton onDone={onBackToLibrary} />
           <div className="relative flex items-center gap-2" ref={historyButtonRef}>
             <button
               className="bg-surface text-text-primary p-2 rounded-full hover:bg-card-active transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

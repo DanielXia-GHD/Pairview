@@ -196,6 +196,7 @@ impl PhotoMeta {
                 KeepRaw::Auto => None,
                 k => Some(k.as_str().to_string()),
             }),
+            edited: None,
         }
     }
 }
@@ -366,12 +367,20 @@ pub fn sync_shoots(cat: &mut Catalog, shoots: &[i64]) -> Result<usize> {
         for photo_id in stale {
             // One unreadable sidecar must not stop the rest of the library from syncing.
             let read = photo_files(cat, photo_id).and_then(|files| {
-                let (meta, _) = read_sidecars(&files)?;
-                Ok((meta, sidecar_stamp(&files)))
+                let (meta, text) = read_sidecars(&files)?;
+                Ok((meta, text, sidecar_stamp(&files)))
             });
             match read {
-                Ok((meta, stamp)) => {
+                Ok((meta, text, stamp)) => {
                     store(cat, photo_id, &meta, stamp)?;
+                    // A catalog rebuilt from disk learns which Photos are rendered edits.
+                    if text.is_some_and(|t| xmp::read(&t).edited.is_some()) {
+                        cat.conn().execute(
+                            "UPDATE photos SET state = 'edited'
+                             WHERE id = ?1 AND state = 'raw_display'",
+                            [photo_id],
+                        )?;
+                    }
                     updated += 1;
                 }
                 Err(e) => log::warn!("Pairview: sidecars of Photo {photo_id}: {e:#}"),
@@ -379,6 +388,23 @@ pub fn sync_shoots(cat: &mut Catalog, shoots: &[i64]) -> Result<usize> {
         }
     }
     Ok(updated)
+}
+
+/// Records in the Photo's XMP that its display copy was rendered from the RAW at `at` (`None`
+/// clears it: Revert, M3-03). Only the XMP sidecar is written.
+pub fn mark_edited(cat: &Catalog, photo_id: i64, at: Option<i64>) -> Result<()> {
+    let files = photo_files(cat, photo_id)?;
+    let (current, existing) = read_sidecars(&files)?;
+    // A new XMP gets the full state: `current` may have come from `.rrdata`.
+    let mut edit = match existing {
+        Some(_) => xmp::XmpEdit::default(),
+        None => PhotoMeta::default().xmp_edit(&current),
+    };
+    edit.edited = Some(at.map(|t| t.to_string()));
+    let out = xmp::apply(existing.as_deref(), &edit)
+        .with_context(|| format!("{} was left unchanged", files.xmp.display()))?;
+    write_sidecar(&files.xmp, "xmp", out.as_bytes())?;
+    store(cat, photo_id, &current, sidecar_stamp(&files))
 }
 
 fn store(cat: &Catalog, photo_id: i64, meta: &PhotoMeta, stamp: Option<i64>) -> Result<()> {

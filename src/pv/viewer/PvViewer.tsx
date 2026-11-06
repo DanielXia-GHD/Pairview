@@ -25,7 +25,7 @@ import { useUIStore } from '../../store/useUIStore';
 import { COLOR_LABELS } from '../../utils/adjustments';
 import type { ImageFile } from '../../components/ui/AppProperties';
 import { pvApi, type ColorLabel, type KeepRaw, type MetaChange, type PhotoItem } from '../api';
-import { basePath, pvPhotoForPath, usePvPhotoStore } from '../store';
+import { basePath, pvPhotoForPath, usePvPhotoStore, displayVersion } from '../store';
 import { badgeLabel } from '../grid/PvTileBadge';
 import InfoPanel, { loadInfoOpen, saveInfoOpen } from './info';
 import { recursivePaths, shuffled, SLIDESHOW_SECONDS, useSlideshowOptions, type SlideshowOptions } from './slideshow';
@@ -60,7 +60,8 @@ export const pvOpenViewer = (path: string) => usePvViewer.getState().open(path);
 
 function imageUrl(photo: PhotoItem, jpeg: boolean) {
   const base = navigator.userAgent.includes('Windows') ? 'http://pvimg.localhost' : 'pvimg://localhost';
-  return `${base}/photo/${photo.id}${jpeg ? '?jpeg' : ''}`;
+  const query = [`v=${displayVersion(photo.id)}`, ...(jpeg ? ['jpeg'] : [])].join('&');
+  return `${base}/photo/${photo.id}?${query}`;
 }
 
 const isTyping = () => {

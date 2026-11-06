@@ -31,5 +31,12 @@ export const usePvPhotoStore = create<PvPhotoState>((set) => ({
   clear: () => set({ byPath: {} }),
 }));
 
+// Done replaces a display copy under the same URL; the version keeps the webview from showing the
+// old image for the rest of the session.
+const displayVersions = new Map<number, number>();
+export const bumpDisplayVersion = (photoId: number) =>
+  displayVersions.set(photoId, (displayVersions.get(photoId) ?? 0) + 1);
+export const displayVersion = (photoId: number) => displayVersions.get(photoId) ?? 0;
+
 export const pvPhotoForPath = (path: string): PhotoItem | undefined =>
   usePvPhotoStore.getState().byPath[basePath(path)];

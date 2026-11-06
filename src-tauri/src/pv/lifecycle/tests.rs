@@ -1296,3 +1296,150 @@ fn raw_alone_through_upstream_takes_sidecars_written_since_the_scan() {
     assert_eq!(lib["s/hif/DSC0001.xmp"], b"rating");
     assert!(!lib.keys().any(|k| k.contains("/arw/")));
 }
+
+// ---- M3-02: overwrite ----
+
+#[test]
+fn replace_display_moves_the_original_out_and_the_render_in() {
+    let mut f = Fixture::new(SHOOT);
+    let before = f.library();
+    let p = f.photo("dsc0002");
+    let r = replace_display(&mut f.cat, p, b"the render").unwrap();
+    let lib = f.library();
+    assert_eq!(lib["2026-10-23_1/hif/DSC0002.HIF"], b"the render");
+    assert_eq!(
+        lib["2026-10-23_1/arw/DSC0002.ARW"],
+        before["2026-10-23_1/arw/DSC0002.ARW"]
+    );
+    assert_eq!(
+        lib.len(),
+        before.len(),
+        "no temp file left: {:?}",
+        lib.keys()
+    );
+    let trash = f.trash();
+    assert_eq!(
+        trash[&format!("{}/2026-10-23_1/hif/DSC0002.HIF", r.op_id)],
+        before["2026-10-23_1/hif/DSC0002.HIF"],
+        "camera original, byte for byte"
+    );
+    let m = Manifest::read(&f.root.join(TRASH_DIR).join(&r.op_id)).unwrap();
+    assert_eq!((m.reason, m.kind.as_str()), (Reason::Replaced, "overwrite"));
+    assert_eq!(m.status, manifest::Status::Committed);
+    assert_eq!(state_of(&f, p), "edited");
+    assert_eq!(f.op_status("overwrite"), ["committed"]);
+    // Still one pair in the catalog, with the new size.
+    let size: i64 = f
+        .cat
+        .conn()
+        .query_row(
+            "SELECT size FROM files WHERE name = 'DSC0002.HIF'",
+            [],
+            |x| x.get(0),
+        )
+        .unwrap();
+    assert_eq!(size, 10);
+    assert_eq!(f.files_in_catalog(), 7);
+    // A later scan changes nothing about it.
+    f.rescan();
+    assert_eq!(state_of(&f, p), "edited");
+    // Undo is for deletes; it must not touch an overwrite.
+    assert!(undo_last(&mut f.cat).unwrap().is_none());
+    assert_eq!(f.library()["2026-10-23_1/hif/DSC0002.HIF"], b"the render");
+}
+
+#[test]
+fn a_second_render_keeps_both_older_versions_in_recently_deleted() {
+    let mut f = Fixture::new(SHOOT);
+    let before = f.library();
+    let p = f.photo("dsc0002");
+    let a = replace_display(&mut f.cat, p, b"render one").unwrap();
+    let b = replace_display(&mut f.cat, p, b"render two").unwrap();
+    assert_eq!(f.library()["2026-10-23_1/hif/DSC0002.HIF"], b"render two");
+    let t = f.trash();
+    assert_eq!(
+        t[&format!("{}/2026-10-23_1/hif/DSC0002.HIF", a.op_id)],
+        before["2026-10-23_1/hif/DSC0002.HIF"]
+    );
+    assert_eq!(
+        t[&format!("{}/2026-10-23_1/hif/DSC0002.HIF", b.op_id)],
+        b"render one"
+    );
+}
+
+/// Every crash point of the two renames, and a failed rename, end with the original back.
+#[test]
+fn overwrite_rolls_back_from_every_crash_point() {
+    for (interrupt, recovered) in [
+        (Interrupt::Crash(0), true),
+        (Interrupt::Crash(1), true),
+        (Interrupt::Fail(0), false),
+        (Interrupt::Fail(1), false),
+    ] {
+        let mut f = Fixture::new(SHOOT);
+        let before = f.library();
+        let p = f.photo("dsc0002");
+        INTERRUPT.with(|i| i.set(Some(interrupt)));
+        let r = replace_display(&mut f.cat, p, b"the render");
+        INTERRUPT.with(|i| i.set(None));
+        assert!(r.is_err());
+        if recovered {
+            assert_eq!(recover(&mut f.cat).unwrap().rolled_back, 1);
+        }
+        assert_eq!(f.library(), before, "library after rollback");
+        assert!(f.trash().is_empty(), "{:?}", f.trash().keys());
+        // Temp files are dot-files: look for them directly.
+        let hif = fs::read_dir(f.abs("2026-10-23_1/hif")).unwrap().count();
+        assert_eq!(hif, 3, "temp file left behind");
+        assert_eq!(f.op_status("overwrite"), ["rolled_back"]);
+        assert_eq!(state_of(&f, p), "raw_display");
+    }
+}
+
+#[test]
+fn overwrite_refused_offline_and_without_a_display_copy() {
+    let mut f = Fixture::new(&["s/DSC0001.ARW", "s/DSC0002.ARW", "s/DSC0002.HIF"]);
+    let raw_only = f.photo("dsc0001");
+    assert!(replace_display(&mut f.cat, raw_only, b"x").is_err());
+    let p = f.photo("dsc0002");
+    let everything = snapshot(&f.root, &|_| true);
+    f.go_offline();
+    let err = replace_display(&mut f.cat, p, b"x").unwrap_err();
+    assert!(err.to_string().contains("offline"), "{err}");
+    assert_eq!(snapshot(&f.root, &|_| true), everything);
+}
+
+#[test]
+fn the_edited_marker_survives_a_catalog_rebuild() {
+    let mut f = Fixture::new(SHOOT);
+    let p = f.photo("dsc0002");
+    replace_display(&mut f.cat, p, b"render").unwrap();
+    crate::pv::metadata::mark_edited(&f.cat, p, Some(1234)).unwrap();
+    let cat = Catalog::open_in_memory().unwrap();
+    let location = locations::add(&cat, &f.root, None).unwrap();
+    let mut g = Fixture {
+        _tmp: tempfile::tempdir().unwrap(),
+        root: f.root.clone(),
+        cat,
+        location,
+    };
+    g.rescan();
+    let shoots: Vec<i64> = {
+        let mut s = g
+            .cat
+            .conn()
+            .prepare("SELECT DISTINCT shoot_folder_id FROM photos")
+            .unwrap();
+        s.query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    };
+    crate::pv::metadata::sync_shoots(&mut g.cat, &shoots).unwrap();
+    assert_eq!(state_of(&g, g.photo("dsc0002")), "edited");
+    assert_eq!(state_of(&g, g.photo("dsc0001")), "raw_display");
+    // Clearing it: the next rebuild sees a camera original again.
+    crate::pv::metadata::mark_edited(&f.cat, p, None).unwrap();
+    let text = fs::read_to_string(f.abs("2026-10-23_1/arw/DSC0002.xmp")).unwrap();
+    assert!(crate::pv::xmp::read(&text).edited.is_none());
+}

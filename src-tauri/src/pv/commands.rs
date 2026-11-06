@@ -1076,3 +1076,63 @@ pub fn pv_slim_mark_reviewed(state: State<PvState>, shoot_id: i64) -> Result<(),
     let cat = state.writer().map_err(err)?;
     crate::pv::intent::mark_slim_reviewed(&cat, shoot_id, catalog::now_ms()).map_err(err)
 }
+
+// ---- Done (M3-02) -----------------------------------------------------------------------------
+
+/// Done in the editor: renders the RAW + recipe at full resolution and replaces the Photo's
+/// display copy; the old one goes to Recently Deleted. `adjustments` are the editor's current
+/// ones, so an edit made a moment ago counts even before its sidecar is saved.
+#[tauri::command]
+pub async fn pv_edit_done(
+    app: AppHandle,
+    path: String,
+    adjustments: Option<serde_json::Value>,
+) -> Result<lifecycle::Replaced, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<PvState>();
+        let target = PathBuf::from(lifecycle::upstream::base_path(&path));
+        let photo = {
+            let cat = state.writer().map_err(err)?;
+            let ids = lifecycle::plan::photo_ids_for_paths(&cat, std::slice::from_ref(&target))
+                .map_err(err)?
+                .ok_or_else(|| "this isn't a Photo in a library location".to_string())?;
+            let photo = ids[0];
+            // Fail before the expensive render when it can't succeed.
+            crate::pv::edit::display_to_replace(&cat, photo).map_err(err)?;
+            let location: i64 = cat
+                .conn()
+                .query_row(
+                    "SELECT f.location_id FROM photos p JOIN folders f ON f.id = p.shoot_folder_id
+                     WHERE p.id = ?1",
+                    [photo],
+                    |r| r.get(0),
+                )
+                .map_err(|e| e.to_string())?;
+            let location = locations::get(&cat, location)
+                .map_err(err)?
+                .ok_or_else(|| "location not found".to_string())?;
+            let status = locations::status(&location, &locations::mounts());
+            if !status.is_online() {
+                return Err(format!(
+                    "{} is offline ({status:?}); nothing was changed",
+                    location.name
+                ));
+            }
+            photo
+        };
+        let rendered = crate::export_processing::render_for_pairview(&path, adjustments, &app)?;
+        let mut cat = state.writer().map_err(err)?;
+        let replaced = crate::pv::edit::finish(&mut cat, photo, &rendered).map_err(err)?;
+        let _ = app.emit(
+            FOLDER_CHANGED_EVENT,
+            watch::FolderChanged {
+                location_id: replaced.location_id,
+                folders: Vec::new(),
+                shoots: Vec::new(),
+            },
+        );
+        Ok(replaced)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

@@ -1173,6 +1173,39 @@ fn set_timestamps_from_exif(src: &Path, dst: &Path) {
     }
 }
 
+/// PV: the full-resolution render behind Pairview's Done (pv/edit.rs): the export pipeline at 16
+/// bits, with no resize, border or watermark. `adjustments` default to the recipe on disk.
+pub(crate) fn render_for_pairview(
+    path: &str,
+    adjustments: Option<Value>,
+    app_handle: &tauri::AppHandle,
+) -> Result<DynamicImage, String> {
+    let state = app_handle.state::<AppState>();
+    let context = get_or_init_gpu_context(&state, app_handle)?;
+    let settings = load_settings(app_handle.clone()).unwrap_or_default();
+    let (source_path, sidecar_path) = parse_virtual_path(path);
+    let source = source_path.to_string_lossy().to_string();
+    crate::ai_jobs::ensure_ready(app_handle, path)
+        .map_err(|e| format!("Failed to generate AI results: {}", e))?;
+    let mut js_adjustments = adjustments
+        .unwrap_or_else(|| crate::exif_processing::load_sidecar(&sidecar_path).adjustments);
+    hydrate_adjustments(&state, &mut js_adjustments);
+    let bytes = read_file_mapped(Path::new(&source)).map_err(|e| e.to_string())?;
+    let base = load_and_composite(&bytes, &source, &js_adjustments, false, &settings, None)
+        .map_err(|e| format!("Failed to load {source}: {e}"))?;
+    process_image_for_export_pipeline(
+        &source,
+        &base,
+        &js_adjustments,
+        &context,
+        &state,
+        is_raw_file(&source),
+        "pv_render",
+        app_handle,
+        RenderOutputPrecision::SixteenBit,
+    )
+}
+
 fn save_image_with_metadata(
     image: &DynamicImage,
     output_path: &std::path::Path,

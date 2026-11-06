@@ -4,6 +4,7 @@
 pub mod assets;
 pub mod catalog;
 pub mod commands;
+pub mod edit;
 pub mod exif_read;
 pub mod heif;
 pub mod intent;

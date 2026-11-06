@@ -338,6 +338,12 @@
       "badge": "{{name}} offline · read-only",
       "hint": "Thumbnails and details come from the catalog. Ratings, deletes and other changes wait until the location is connected.",
       "refused": "{{name}} is offline. Nothing was changed; connect it and try again."
+    },
+    "edit": {
+      "button": "Done",
+      "rendering": "Rendering…",
+      "hint": "Render this edit at full size and replace the {{display}}. The one it replaces goes to Recently Deleted for 30 days; the RAW and your edits stay.",
+      "done": "New {{display}} saved ({{size}}). The old one is in Recently Deleted."
     }
   }
 }

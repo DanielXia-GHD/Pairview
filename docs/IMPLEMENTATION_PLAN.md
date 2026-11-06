@@ -151,9 +151,9 @@ These refine PRD §8 and are binding unless changed here.
 | ID | Task | Tier | Depends |
 |---|---|---|---|
 | `[x] M3-01` | `E` opens the editor on the RAW (representative path) from grid and viewer. Done: the viewer had it (M1-14); E in the grid takes over upstream's E (export panel) only when a Pairview Photo is active | S | M1-14 |
-| `[ ] M3-02` | **Done → overwrite** the display copy in its own format (HIF 10-bit via M0-06, JPG q92), metadata copy, camera original to Recently Deleted 🛡 | O | M0-06, M2-01 |
+| `[ ] M3-02` | **Done → overwrite** the display copy in its own format (HIF 10-bit via M0-06, JPG q92), metadata copy, camera original to Recently Deleted 🛡. Built, not closed: `pv/edit.rs` (encode, decode back to verify), `lifecycle::replace_display` (renames under the op-log; all crash points tested), `pairview:Edited` XMP marker, `render_for_pairview` hook, Done button. File side verified on a real HIF; the **GPU render has only run in no test** and needs the owner's check in the app before this is marked done | O | M0-06, M2-01 |
 | `[ ] M3-03` | Hidden base for no-RAW Photos (`.originals/`), revert, re-edit from recipe 🛡 | O | M3-02 |
-| `[ ] M3-04` | Thumbnail/viewer cache invalidation after overwrite | S | M3-02 |
+| `[x] M3-04` | Thumbnail/viewer cache invalidation after overwrite. Done: grid thumbnails were already keyed on RAW mtime + recipe; the viewer URL gets a per-session display version; RAW-value statistics follow the file's mtime | S | M3-02 |
 | `[ ] M3-05` | **Edit-history capture** for style learning (features + final sliders + look), local store | S | M3-02 |
 | `[ ] M3-06` | **"My Sony" look fitting**: sample ARW→HIF pairs, fit tone curve + 3D LUT, save as a RapidRAW LUT preset; quality metric (ΔE vs camera HIF) | O | M3-01 |
 | `[ ] M3-07` | Looks picker (live thumbnails, intensity), classic looks library v1 (LUT files) | S | M3-06 |

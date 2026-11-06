@@ -2985,6 +2985,7 @@ pub fn run() {
             pv::commands::pv_slim_review,
             pv::commands::pv_slim_apply,
             pv::commands::pv_slim_mark_reviewed,
+            pv::commands::pv_edit_done,
             pv::commands::pv_list_images_for_path,
             pv::commands::pv_set_metadata,
         ])

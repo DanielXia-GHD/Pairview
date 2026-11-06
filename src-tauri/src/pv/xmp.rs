@@ -10,6 +10,8 @@
 //! - `xmp:Label`: the color label (`Red`, `Yellow`, …) or any text another tool wrote.
 //! - `pairview:Flag`: `pick` / `reject`. Adobe XMP has no pick flag.
 //! - `pairview:KeepRaw`: `keep` / `drop`, the owner's Keep-RAW lock (PRD §6.5). `auto` = absent.
+//! - `pairview:Edited`: when the display copy was rendered from the RAW (M3-02), so a rebuilt
+//!   catalog still knows the Photo is `✎`.
 
 use anyhow::{Result, bail};
 use quick_xml::escape::{escape, unescape};
@@ -25,6 +27,8 @@ pub struct XmpFields {
     pub label: Option<String>,
     pub flag: Option<String>,
     pub keep_raw: Option<String>,
+    /// When the display copy was last rendered from the RAW (Unix ms). Absent = camera original.
+    pub edited: Option<String>,
 }
 
 /// One property change: `Some(None)` removes it, `None` leaves it alone.
@@ -34,6 +38,7 @@ pub struct XmpEdit {
     pub label: Option<Option<String>>,
     pub flag: Option<Option<String>>,
     pub keep_raw: Option<Option<String>>,
+    pub edited: Option<Option<String>>,
 }
 
 impl XmpEdit {
@@ -50,6 +55,7 @@ pub fn read(content: &str) -> XmpFields {
         label: property(content, &xmp, "Label").filter(|v| !v.is_empty()),
         flag: property(content, &pv, "Flag").filter(|v| !v.is_empty()),
         keep_raw: property(content, &pv, "KeepRaw").filter(|v| !v.is_empty()),
+        edited: property(content, &pv, "Edited").filter(|v| !v.is_empty()),
     }
 }
 
@@ -78,6 +84,7 @@ pub fn apply(existing: Option<&str>, edit: &XmpEdit) -> Result<String> {
         (&xmp, XMP_NS, "Label", edit.label.clone()),
         (&pv, PAIRVIEW_NS, "Flag", edit.flag.clone()),
         (&pv, PAIRVIEW_NS, "KeepRaw", edit.keep_raw.clone()),
+        (&pv, PAIRVIEW_NS, "Edited", edit.edited.clone()),
     ];
 
     for (prefix, ns, name, change) in changes {
@@ -277,7 +284,8 @@ mod tests {
                 rating: Some(3),
                 label: Some("Red".into()),
                 flag: None,
-                keep_raw: None
+                keep_raw: None,
+                edited: None
             }
         );
     }
