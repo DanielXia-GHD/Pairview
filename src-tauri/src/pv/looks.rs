@@ -105,6 +105,13 @@ mod tests {
     }
 
     #[test]
+    fn an_approximate_style_is_still_a_camera_style() {
+        let looks = catalogue(vec![lut("Fujifilm Velvia (approximate)", false)]);
+        assert_eq!(looks[0].group, LookGroup::CameraStyle);
+        assert_eq!(looks[0].name, "Fujifilm Velvia (approximate)");
+    }
+
+    #[test]
     fn the_owners_own_luts_stay_out_of_the_panel() {
         let looks = catalogue(vec![lut("Teal and Orange", false), lut("Sonyish", false)]);
         assert!(looks.is_empty(), "{looks:?}");

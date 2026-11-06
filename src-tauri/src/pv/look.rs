@@ -280,6 +280,123 @@ pub fn fit(samples: &[(Rgb, Rgb)]) -> Lut3d {
     lut
 }
 
+// ---- Moving a look to another camera (M3-13) --------------------------------------------------
+
+fn luma(c: Rgb) -> f32 {
+    0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+
+impl Lut3d {
+    /// The same look with no colour: for monochrome film modes. The fit's fallback for colours it
+    /// never saw is per-channel curves, which would otherwise leave saturated colours tinted.
+    pub fn desaturated(&self) -> Lut3d {
+        Lut3d {
+            size: self.size,
+            data: self.data.iter().map(|&c| [luma(c); 3]).collect(),
+        }
+    }
+
+    /// Evens out noise between neighbouring nodes without moving the look: `passes` of a 1-2-1
+    /// blur along each axis of what the look adds to the identity. From a few frames, a lone node
+    /// can stray enough to show as a narrow colour band in a grey sky.
+    pub fn smoothed(&self, passes: usize) -> Lut3d {
+        let n = self.size;
+        let base = Lut3d::identity(n);
+        let index = |p: [usize; 3]| p[0] + p[1] * n + p[2] * n * n;
+        let mut residual: Vec<Rgb> = self
+            .data
+            .iter()
+            .zip(&base.data)
+            .map(|(v, b)| std::array::from_fn(|i| v[i] - b[i]))
+            .collect();
+        for _ in 0..passes {
+            for axis in 0..3 {
+                let before = residual.clone();
+                for b in 0..n {
+                    for g in 0..n {
+                        for r in 0..n {
+                            let p = [r, g, b];
+                            let (mut lo, mut hi) = (p, p);
+                            lo[axis] = p[axis].saturating_sub(1);
+                            hi[axis] = (p[axis] + 1).min(n - 1);
+                            let (a, m, z) =
+                                (before[index(lo)], before[index(p)], before[index(hi)]);
+                            residual[index(p)] =
+                                std::array::from_fn(|i| (a[i] + 2.0 * m[i] + z[i]) / 4.0);
+                        }
+                    }
+                }
+            }
+        }
+        Lut3d {
+            size: n,
+            data: residual
+                .iter()
+                .zip(&base.data)
+                .map(|(d, b)| std::array::from_fn(|i| (b[i] + d[i]).clamp(0.0, 1.0)))
+                .collect(),
+        }
+    }
+
+    /// This look with `curve` (256 entries over 0..1) applied to its input.
+    pub fn with_input_curve(&self, curve: &[f32]) -> Lut3d {
+        let last = (curve.len() - 1) as f32;
+        let at = |v: f32| {
+            let x = v.clamp(0.0, 1.0) * last;
+            let lo = (x.floor() as usize).min(curve.len() - 2);
+            let f = x - lo as f32;
+            curve[lo] * (1.0 - f) + curve[lo + 1] * f
+        };
+        let mut out = Lut3d::identity(self.size);
+        for node in &mut out.data {
+            *node = self.apply(node.map(at));
+        }
+        out
+    }
+}
+
+/// How to feed another camera's neutral render into a look fitted on `base_look`'s camera, so the
+/// result has the brightness that camera's own files have.
+///
+/// Cameras leave different headroom in their RAWs, so a neutral render of the same scene differs by
+/// about a stop between brands. `camera_samples` are `(neutral, camera file)` pairs from the camera
+/// the look will be used on, and `base_look` is the look that plays the role of its standard
+/// rendering. The result maps its neutral value `v` to the value `u` where
+/// `base_look(u)` is as bright as its camera file at `v`. Only brightness moves.
+pub fn input_curve_for_camera(camera_samples: &[(Rgb, Rgb)], base_look: &Lut3d) -> Vec<f32> {
+    let tone: Samples = camera_samples
+        .iter()
+        .map(|(n, c)| ([luma(*n); 3], [luma(*c); 3]))
+        .collect();
+    let target = &fit_curves(&tone)[0];
+    let brightness = |u: f32| luma(base_look.apply([u; 3]));
+    let solved: Vec<f32> = target
+        .iter()
+        .map(|&t| {
+            let (mut lo, mut hi) = (0f32, 1f32);
+            for _ in 0..24 {
+                let mid = (lo + hi) / 2.0;
+                if brightness(mid) < t {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            (lo + hi) / 2.0
+        })
+        .collect();
+    // The steps of a monotonic fit would show up as banding in skies.
+    const REACH: isize = 6;
+    let last = solved.len() as isize - 1;
+    (0..=last)
+        .map(|i| {
+            let range = (i - REACH).max(0)..=(i + REACH).min(last);
+            let n = range.clone().count() as f32;
+            range.map(|j| solved[j as usize]).sum::<f32>() / n
+        })
+        .collect()
+}
+
 // ---- Auto with a look -------------------------------------------------------------------------
 
 /// Brightness range (mean sRGB-encoded luma) the camera's own files sit in: across the 12 held-out
@@ -430,6 +547,60 @@ mod tests {
             (g * 0.90 + b * 0.10).clamp(0.0, 1.0),
             (b * 0.92 + r * 0.08).clamp(0.0, 1.0),
         ]
+    }
+
+    #[test]
+    fn smoothing_removes_a_stray_node_and_keeps_the_look() {
+        let mut lut = fit(&points(6000)
+            .into_iter()
+            .map(|n| (n, camera(n)))
+            .collect::<Vec<_>>());
+        let before = lut.clone();
+        let node = 16 + 16 * 33 + 16 * 33 * 33;
+        lut.data[node][0] += 0.05;
+        let smooth = lut.smoothed(1);
+        let stray = |l: &Lut3d| (l.data[node][0] - before.data[node][0]).abs();
+        assert!(stray(&smooth) < stray(&lut) / 2.0, "{}", stray(&smooth));
+        for c in points(500) {
+            let (a, b) = (before.apply(c), before.smoothed(1).apply(c));
+            assert!(delta_e(a, b) < 1.5, "{c:?}: {}", delta_e(a, b));
+        }
+        let identity = Lut3d::identity(9);
+        assert_eq!(identity.smoothed(2).data, identity.data);
+    }
+
+    #[test]
+    fn desaturated_look_has_no_colour() {
+        let lut = fit(&points(4000)
+            .into_iter()
+            .map(|n| (n, camera(n)))
+            .collect::<Vec<_>>())
+        .desaturated();
+        let [r, g, b] = lut.apply([0.9, 0.1, 0.2]);
+        assert_eq!(r, g);
+        assert_eq!(g, b);
+    }
+
+    #[test]
+    fn input_curve_makes_a_look_as_bright_as_the_other_camera() {
+        // The other camera's neutral render is a stop darker than the look expects.
+        let darker = |v: f32| v * 0.6;
+        let look = fit(&points(6000)
+            .into_iter()
+            .map(|n| (n, camera(n)))
+            .collect::<Vec<_>>());
+        let other: Samples = points(6000)
+            .into_iter()
+            .map(|n| (n.map(darker), camera(n)))
+            .collect();
+        let curve = input_curve_for_camera(&other, &look);
+        let moved = look.with_input_curve(&curve);
+        for v in [0.2f32, 0.4, 0.6] {
+            let got = luma(moved.apply([darker(v); 3]));
+            let want = luma(camera([v; 3]));
+            assert!((got - want).abs() < 0.03, "{v}: got {got}, want {want}");
+        }
+        assert!(curve.windows(2).all(|w| w[1] >= w[0] - 1e-3), "monotonic");
     }
 
     /// Deterministic low-discrepancy points, denser around neutral like real photos.

@@ -52,3 +52,47 @@ All 20 Spektrafilm stocks, baked by `scripts/pv-bake-film-looks.py` into `src-ta
 - **Highlights are not pure white:** Portra 400's gray axis tops out near 0.85, its print's maximum in the simulation. That's part of the look; it can be dialled back with intensity.
 
 **Limits.** A LUT can't hold grain, halation or anything local (M3-11, M7). Recipes store a look's absolute path, and a bundled look's path differs between dev and packaged builds; a look that can't be found now renders as no look instead of black, but the recipe would have to be pointed at it again. To sort out before packaging.
+
+# Fujifilm-inspired styles (M3-13)
+
+LUTs that give the Sony's neutral render the character of a Fuji film mode. Fitted 2026-11-06 from public RAFs, [listed with their licences](M3-look-sources.md). Installed in the app's `luts` folder; not committed, per the plan's rules. Named `Fujifilm …`, which puts them under Camera styles.
+
+| Look | Frames | Scored | Neutral render | With look | Worst frame | On the Sony: saturation |
+|---|---|---|---|---|---|---|
+| Fujifilm Provia | 31 | 31 | 10.33 | **1.95** | 17.85 | 0.135 |
+| Fujifilm Astia | 9 | 8 | 7.92 | **2.26** | 5.37 | 0.124 |
+| Fujifilm Classic Chrome | 9 | 8 | 11.00 | **2.22** | 3.44 | 0.116 |
+| Fujifilm Velvia (approximate) | 15 | 12 | 12.75 | **3.02** | 8.02 | 0.144 |
+
+Median of per-frame median ΔE2000 against the camera's JPEG, on Fuji's own frames. The bar is ≤ 3 on at least 5 frames. The Sony's own files have saturation 0.139 and its neutral render 0.110, so the order is what these film modes should give, and it wasn't built in. Looks differ from each other by a median of 2.4 to 3.5 on the Sony.
+
+**Velvia misses by 0.02.** Without smoothing it scores 3.00 but keeps a downward step on its grey axis at 0.84. Smoothing was decided on before these numbers, so it stands and the look is labelled approximate, as the plan says. The job writes that label itself.
+
+**Left out, with no file written:** Acros (2 scenes), Eterna (2), Reala Ace (2), Classic Neg (1), Nostalgic Neg (1). There's nothing to hold out, so nothing could say how good they are. Those counts are before the settings filter, which leaves one Acros scene and none of the other four.
+
+**Method.** The same fit as My Sony, with these differences:
+- **Camera side.** The JPEG inside the RAF, with its orientation applied, converted from Adobe RGB where needed (12 of the frames).
+- **Alignment.** Fuji's JPEGs are lens-corrected and the render isn't, so zoom and shift are searched per frame. Frames with correlation under 0.92 or under 1,000 usable blocks are dropped: 9 of 73.
+- **Scoring.** One frame per scene, and each scored frame is held out in turn, with a fit that saw neither it nor anything else by its photographer. The final look trains on all of them. This matters: holding out only the frame, Astia scored 1.18, because 7 of its 9 frames come from two people.
+- **Brightness gate.** Frames with a median brightness outside 0.12–0.85 are excluded, 8 of 81. Near-black colours can hardly differ, so night scenes flattered the score. A first run gave Provia 2.27 on a set that happened to include three of them.
+- **DR.** DR200 and DR400 frames are fine, because RapidRAW adds +1 and +2 EV for them.
+- **Smoothing.** One 1-2-1 pass over what the look adds to the identity, against stray nodes.
+- **Moving to the Sony.** One input curve for all looks, so they keep their differences, computed so that Provia on the Sony's neutral render is as bright as the Sony's own file. It's close to identity (0.5 → 0.57). Luma on the 12 held-out Sony pairs is 0.51–0.52 against the camera's 0.49.
+
+Through the real GPU path on 3 Sony pairs, each look matches the CPU calculation to a median of 0.05 or better.
+
+```sh
+python3 -I scripts/pv-playraw-harvest.py <dir>/survey            # slow, on purpose
+python3 -I scripts/pv-raf-survey.py <urls.txt> <survey.jsonl>
+python3 -I scripts/pv-style-select.py <dir>                      # expects survey/all.json
+python3 -I scripts/pv-style-fetch.py <dir>
+PV_STYLE_DIR=<dir> PV_LOOK_DIR=<Sony pairs> cargo test --lib pv::look_job::fit_camera -- --nocapture
+python3 scripts/pv-style-gate.py <dir>                           # then run the job again; needs numpy, pillow
+```
+
+**Limits.**
+- **These scores are Fuji on Fuji.** Nothing measures how close a look is on the Sony, because no Sony file exists in Provia. The transfer rests on RapidRAW's neutral renders being comparable between brands. Saturation order, brightness and GPU match are checked; the character needs the owner's eye.
+- Provia's tone on the Sony follows the Sony's own files, by construction. The other looks keep their difference from Provia.
+- Astia's frames come from four photographers, on X-T3, X-T30 and X-T4 bodies only. It has a grey-axis tint of up to 0.04 around 0.62, the largest of the four. Watch for it in grey skies.
+- Some frames are far off and stay in the score: an X-T10 frame at 17.85, where the camera lifted the image far more than usual, and an X-T30 frame at 13.52 with no lift at all, unexplained. The X-T30 frame fell out when frames were reselected at random, and was put back by hand so that it couldn't vanish from the score unnoticed.
+- Fits came from RapidRAW's default tone mapper, so a change there means fitting again.

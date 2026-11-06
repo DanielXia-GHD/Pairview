@@ -1,6 +1,6 @@
 # Pairview: project summary
 
-As of 2026-11-06, commit `559b26e8` on `main` plus this document.
+As of 2026-11-06, after M3-13.
 
 Pairview is a personal photo library, viewer and editor for macOS (M2), forked from [RapidRAW](https://github.com/CyberTimon/RapidRAW). A RAW and its display copy (ARW + HIF or JPG) are managed as one "Photo". The library lives mainly on a QNAP NAS.
 
@@ -15,10 +15,10 @@ Pairview is a personal photo library, viewer and editor for macOS (M2), forked f
 | M0 Mac spikes | Done |
 | M1 Library + viewer | Done |
 | M2 Lifecycle + Keep-RAW | Built. Open: M2-11's NAS half |
-| M3 Edit loop + looks | Mostly built. Open: M3-13, M3-14, M3-15, M3-12, M3-09 |
+| M3 Edit loop + looks | Mostly built. Open: M3-14, M3-15, M3-12, M3-09 |
 | M4–M7, Windows | Not started |
 
-197 Pairview tests pass. Nothing is packaged yet: the app runs through `tauri dev`.
+204 Pairview tests pass. Nothing is packaged yet: the app runs through `tauri dev`.
 
 ## What works today
 
@@ -31,6 +31,7 @@ Pairview is a personal photo library, viewer and editor for macOS (M2), forked f
 **Looks (M3).** A Looks panel with live thumbnails, favourites and intensity.
 - **My Sony:** fitted from 60 of the owner's ARW + HIF pairs, and the default for a RAW with no recipe. Median colour error against the camera on 12 photos it never saw: 13.13 before, **1.17** after (ΔE2000). [Details](M3-look.md).
 - **20 Spektrafilm film stocks:** baked into LUTs and calibrated to the camera's brightness. With an optional per-stock grain + halation toggle.
+- **Fujifilm-inspired styles:** Provia, Classic Chrome, Astia and an approximate Velvia, fitted from public RAFs and held to median ΔE ≤ 3 against the camera's JPEG. Acros, Eterna, Reala Ace, Classic Neg and Nostalgic Neg are left out for lack of public frames. [Details](M3-look.md), [sources](M3-look-sources.md).
 - **Auto** judges exposure on the look's result, so it doesn't brighten twice.
 
 ## Measured on the real NAS (M1)
@@ -48,6 +49,7 @@ Pairview is a personal photo library, viewer and editor for macOS (M2), forked f
 | | Space and double-click from `arw/` and `hif/`, before/after on a RAW |
 | | Revert, editing without a RAW (M3-03) |
 | | Auto with a look (M3-08), grain + halation toggle (M3-11) |
+| | Fujifilm styles on the owner's photos (M3-13) |
 | | Smoke test of upstream merge `47cdc439` |
 | | NAS half of M2-11: delete, restore, slim on the share |
 
@@ -68,5 +70,7 @@ The logic behind these has automated tests. What's unchecked is the screens them
 - My Sony is specific to this camera and RapidRAW's default tone mapping.
 - Film look highlights top out near 0.85 rather than pure white. That's part of the simulation, and intensity softens it.
 - Grain and halation values are reasoned starting points, not measured.
+- Fujifilm styles are scored on Fuji's own frames. Nothing can measure how close they are on the Sony, so that rests on the owner's eye.
+- The Fujifilm LUTs exist only in the app data folder, like `My Sony.cube`. They aren't committed, by the rules for public samples.
 - Recipes store a look's absolute path, and bundled looks live elsewhere in a packaged build. A missing look now renders as no look rather than black, but this needs solving before packaging.
 - First L0 listing of the whole NAS takes about 150 s. Still to investigate (M1 fix list).

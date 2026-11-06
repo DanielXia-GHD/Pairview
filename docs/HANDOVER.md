@@ -6,16 +6,14 @@ Written 2026-11-06. Read this, then [SUMMARY.md](SUMMARY.md), then the M3 sectio
 
 Paste this:
 
-> Continue Pairview. Read docs/HANDOVER.md and docs/SUMMARY.md first. Tell me briefly where things stand, then ask me whether to start M3-13.
+> Continue Pairview. Read docs/HANDOVER.md and docs/SUMMARY.md first. Tell me briefly where things stand, then ask what I want next.
 
 ## Immediately next
 
-**One decision was waiting when this session ended: whether to start M3-13** (Fujifilm-inspired styles). It's the expensive one, so ask first. Then:
-
 | Task | What | Blocked on |
 |---|---|---|
-| **M3-13** | Fujifilm-inspired styles from public RAW + JPG samples | The owner's go-ahead |
-| **M3-14** | Leica-inspired styles, same method | M3-13 |
+| **M3-13 check** | The owner looks at the four Fujifilm styles on their own photos | The owner. Fits can't be measured on the Sony |
+| **M3-14** | Leica-inspired styles, same method. Leica ships DNG + JPG, so frames need a separate JPG rather than one inside the RAW | Nothing. Expect few reliable pairs, and read each source's robots.txt first |
 | **M3-15** | Tweak some film looks. The owner said only "some film looks need further tweaking" | The owner listing which and what's off. Ask |
 | **M3-12** | Sony Creative Looks: fit from the owner's frames | The owner shooting 3–5 RAW + HIF scenes for each of ST, PT, NT, VV, VV2, FL, IN, SH, BW, SE |
 | **M3-09** | M3 exit: edit 20 photos including a film look and a camera style | All of M3; the owner |
@@ -23,7 +21,7 @@ Paste this:
 
 Then M4. Merge upstream before starting a milestone ([routine](IMPLEMENTATION_PLAN.md), §4.4); `upstream/main` was 5 commits ahead when this was written.
 
-**Rules for M3-13 and M3-14 samples** are in the plan under the M3 table. In short: the owner chose download without asking per source, within limits: image files only, each source in its own folder outside the repo, read the terms and skip a source that forbids this use, log every source in `docs/M3-look-sources.md`, and commit neither the photos nor the fitted brand LUTs. Name looks "Fujifilm …" and "Leica …" in the app's `luts` folder, which is what puts them under Camera styles. Quality bar: held-out median ΔE ≤ 3 on at least 5 frames; otherwise label approximate or leave out. Fits come from another camera's RAWs, so also check them by eye on the owner's photos.
+**Rules for public samples** are in the plan under the M3 table. In short: the owner chose download without asking per source, within limits: image files only, each source in its own folder outside the repo, read the terms and skip a source that forbids this use, log every source in `docs/M3-look-sources.md`, and commit neither the photos nor the fitted brand LUTs. Name looks "Fujifilm …" and "Leica …" in the app's `luts` folder, which is what puts them under Camera styles. Quality bar: held-out median ΔE ≤ 3 on at least 5 frames; otherwise label approximate or leave out. Fits come from another camera's RAWs, so the owner also checks them by eye. Sources tried for Fuji, and why most were skipped, are in that log.
 
 ## How the owner works
 
@@ -70,10 +68,14 @@ Sharing `target/debug` with `tauri dev` corrupted the build twice (`symbol(s) no
 | App data | `~/Library/Application Support/com.danielxia.pairview/`: catalog, settings, `luts/My Sony.cube`, `pairview-edit-history.jsonl` |
 | NAS | `/Volumes/Public/Photos/A/DCIM`, `smb://qnap-home._smb._tcp.local/Public`, 158 shoots |
 
-**`My Sony.cube` exists only in the app data folder,** plus the temp copy below. Refitting needs the NAS again, or the temp copies.
+**`My Sony.cube` and the `Fujifilm …` cubes exist only in the app data folder,** plus the temp copies below. Refitting needs the NAS again, or the temp copies; the Fuji frames can be fetched again from `docs/M3-look-sources.md`.
 
 **Temp data from this session, which may vanish on reboot:** `/private/tmp/claude-501/-Users-xpy-Code-Camera-Photo-Library/91845d97-6a26-4f35-bf43-5fb9389def2d/scratchpad/`
 - `lookfit/`: 60 pairs and their renders, 3.2 GB. Delete when M3 closes.
+
+And from the M3-13 session, `/private/tmp/claude-501/-Users-xpy-Code-Camera-Photo-Library/886f801d-b267-4c1a-a969-c0a99819db6b/scratchpad/fuji/`: `frames/` (one folder per source), `work/` (cached renders), `manifest.tsv`, `cubes/`, about 4 GB. Delete when M3 closes.
+
+From the earlier session, also:
 - `sf/`: Spektrafilm clone and a Python 3.13 environment. To rebuild: clone the repo, then a Python 3.13 venv with its runtime dependencies and `pip install --no-deps -e .`. Skip its GUI dependencies. There's no `uv` or `conda` on this Mac; `uv` was installed inside a venv.
 
 ## State of the test data
@@ -93,6 +95,10 @@ The Desktop shoot isn't pristine, because the owner has been testing on it:
 - **`spektrafilm-lut` zeroes exposure compensation in LUT mode** (`digest_params`). The bake script sets it afterwards. Check by reading the LUT's gray axis.
 - **Recipes without a saved look show My Sony only through the frontend default.** A saved recipe keeps its own look, or none.
 - **Upstream merges conflict rarely,** and so far only near `// PV:` lines.
+- **Near-black frames flatter a look's score,** and public RAWs lean towards difficult night shots. Keep the brightness gate (`scripts/pv-style-gate.py`).
+- **Holding out a frame isn't enough if its photographer stays in training:** Astia went from 1.18 to 2.26 when they were held out too.
+- **Pillow reads 16-bit RGB PNGs as 8-bit,** so the job's cached PNGs divide by 255 in Python.
+- **Read a source's robots.txt in full before the first automated request.** Photography Blog's reserved its rights below the 25 lines I printed, and it was surveyed before that was noticed.
 
 ## Not done, on purpose
 
