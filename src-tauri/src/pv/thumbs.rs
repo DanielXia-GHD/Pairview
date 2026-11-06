@@ -49,6 +49,16 @@ pub fn thumbnail_file_id(cat: &Catalog, photo_id: i64) -> Result<Option<i64>> {
     })
 }
 
+/// `image` reduced to fit `max_px`. Use this rather than `DynamicImage::thumbnail`, which corrupts
+/// floating-point images: a linear RAW's mean went from 0.10 to 0.60. Values above 1.0 are clipped
+/// by the resize, which barely moves a mean and doesn't matter for measuring or previewing.
+pub fn shrink(image: &DynamicImage, max_px: u32) -> DynamicImage {
+    if image.width().max(image.height()) <= max_px {
+        return image.clone();
+    }
+    image.resize(max_px, max_px, image::imageops::FilterType::Triangle)
+}
+
 /// A thumbnail from the cheap sources only (RAW preview, HEIF thumbnail, small JPEG), never a
 /// full RAW develop. `None` means the caller needs the full pipeline.
 pub fn quick_thumbnail(path: &Path, target_res: u32) -> Option<DynamicImage> {
@@ -65,6 +75,16 @@ pub fn quick_thumbnail(path: &Path, target_res: u32) -> Option<DynamicImage> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn shrink_keeps_the_brightness_of_a_floating_point_image() {
+        let flat = image::Rgb32FImage::from_pixel(64, 48, image::Rgb([0.1, 0.1, 0.1]));
+        let small = super::shrink(&DynamicImage::ImageRgb32F(flat), 16).to_rgb32f();
+        assert_eq!((small.width(), small.height()), (16, 12));
+        for p in small.pixels() {
+            assert!((p.0[1] - 0.1).abs() < 1e-3, "{p:?}");
+        }
+    }
+
     use super::*;
     use crate::pv::locations;
     use crate::pv::scan::l0::{ScanOptions, scan_location};

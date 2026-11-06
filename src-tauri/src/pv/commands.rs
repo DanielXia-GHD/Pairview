@@ -1218,7 +1218,19 @@ pub fn pv_base_look(app: AppHandle) -> Result<Option<BaseLook>, String> {
 /// The Looks panel's catalogue.
 #[tauri::command]
 pub fn pv_looks(app: AppHandle) -> Result<Vec<crate::pv::looks::Look>, String> {
-    Ok(crate::pv::looks::catalogue(
-        crate::lut_processing::list_luts(app)?,
-    ))
+    // The panel's film stocks are Pairview's own calibrated bake (`resources/pv_film_luts`), not
+    // upstream's six, which stay in the Effects LUT control.
+    let mut entries: Vec<_> = crate::lut_processing::list_luts(app.clone())?
+        .into_iter()
+        .filter(|e| !e.is_built_in)
+        .collect();
+    let film = app
+        .path()
+        .resolve(
+            "resources/pv_film_luts",
+            tauri::path::BaseDirectory::Resource,
+        )
+        .map_err(|e| e.to_string())?;
+    entries.extend(crate::lut_processing::list_luts_in_dir(&film, true).map_err(err)?);
+    Ok(crate::pv::looks::catalogue(entries))
 }

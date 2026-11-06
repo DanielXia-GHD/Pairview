@@ -1,0 +1,32 @@
+Pairview film looks, baked from spektrafilm 0.3.4 by Andrea Volpato
+https://github.com/andreavolpato/spektrafilm
+
+Made with scripts/pv-bake-film-looks.py: V-Log in, sRGB out, one LUT, 25 points. Not modified
+after baking. Licence: SPEKTRAFILM_LICENSE.txt in this folder.
+
+Difference from the reference bake: film exposure compensation, so each look lands near the
+brightness of a Sony A7C II's own files from a RAW with its usual highlight headroom. At 0 EV these
+would match spektrafilm's standard LUTs (checked: K-Portra 400 is identical to RapidRAW's).
+Slide films have no print stage; the header's "Print" line is unused for them.
+
+Stock                     EV     Print
+F-C200                    +1.30  fujifilm_crystal_archive_typeii
+F-Pro 400H                +1.25  fujifilm_crystal_archive_typeii
+F-Provia 100F             +1.10  none: slide film, scanned directly
+F-Velvia 100              +1.15  none: slide film, scanned directly
+F-Xtra 400                +1.30  fujifilm_crystal_archive_typeii
+K-Ektachrome 100          +1.15  none: slide film, scanned directly
+K-Ektar 100               +1.70  kodak_ultra_endura
+K-Gold 200                +1.35  kodak_supra_endura
+K-Kodachrome 64           +1.20  none: slide film, scanned directly
+K-Portra 160              +1.30  kodak_portra_endura
+K-Portra 400              +1.30  kodak_portra_endura
+K-Portra 800              +1.25  kodak_portra_endura
+K-Portra 800 Push +1      +1.35  kodak_portra_endura
+K-Portra 800 Push +2      +1.40  kodak_portra_endura
+K-Ultramax 400            +1.30  kodak_supra_endura
+K-Verita 200D             +1.35  kodak_endura_premier
+K-Vision 50D Cinematic    +1.30  kodak_2383
+K-Vision 200T Cinematic   +1.35  kodak_2383
+K-Vision 250D Cinematic   +1.35  kodak_2383
+K-Vision 500T Cinematic   +1.40  kodak_2383

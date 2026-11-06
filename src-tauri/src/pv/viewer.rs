@@ -117,7 +117,7 @@ fn serve_deleted(app: &AppHandle, rest: &str) -> Result<(Vec<u8>, &'static str)>
     let image = crate::pv::thumbs::quick_thumbnail(&path, DELETED_PREVIEW_PX)
         .or_else(|| image::open(&path).ok())
         .context("no preview")?;
-    let image = image.thumbnail(DELETED_PREVIEW_PX, DELETED_PREVIEW_PX);
+    let image = crate::pv::thumbs::shrink(&image, DELETED_PREVIEW_PX);
     Ok((jpeg(&image)?, "image/jpeg"))
 }
 
@@ -143,9 +143,11 @@ pub fn histogram(state: &PvState, photo_id: i64) -> Result<Histogram> {
         .ok_or_else(|| anyhow!("Photo {photo_id} has no files"))?;
     let image = match crate::pv::thumbs::quick_thumbnail(&source, HISTOGRAM_PX) {
         Some(image) => image,
-        None => image::open(&source)
-            .with_context(|| format!("can't decode {}", source.display()))?
-            .thumbnail(HISTOGRAM_PX, HISTOGRAM_PX),
+        None => {
+            let image = image::open(&source)
+                .with_context(|| format!("can't decode {}", source.display()))?;
+            crate::pv::thumbs::shrink(&image, HISTOGRAM_PX)
+        }
     };
     histogram_of(&image)
 }

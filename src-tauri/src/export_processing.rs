@@ -1089,8 +1089,8 @@ fn process_image_for_export_pipeline(
     )
 }
 
-/// PV: the exposure for Auto when a display-referred look is on, judged on a small render through
-/// that look (pv/look.rs). `None` without a look, or if the render fails: Auto as upstream.
+/// PV: the exposure for Auto when a look is on, judged on a small render through that look
+/// (pv/look.rs). `None` without a look, or if the render fails: Auto as upstream.
 pub(crate) fn auto_exposure_with_look(
     loaded: &crate::app_state::LoadedImage,
     js_adjustments: &Value,
@@ -1098,14 +1098,8 @@ pub(crate) fn auto_exposure_with_look(
     app_handle: &tauri::AppHandle,
 ) -> Option<f64> {
     js_adjustments["lutPath"].as_str()?;
-    if js_adjustments["lutIsSceneReferred"]
-        .as_bool()
-        .unwrap_or(false)
-    {
-        return None;
-    }
     let context = get_or_init_gpu_context(state, app_handle).ok()?;
-    let small = loaded.image.thumbnail(1024, 1024);
+    let small = crate::pv::thumbs::shrink(&loaded.image, 1024);
     let mut adjustments = js_adjustments.clone();
     // Start from the photo as it would come out with the look alone.
     adjustments["exposure"] = serde_json::json!(0);

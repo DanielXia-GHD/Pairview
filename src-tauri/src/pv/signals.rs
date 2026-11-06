@@ -54,7 +54,7 @@ pub struct ImageStats {
 /// Statistics of an image (any size; it is reduced to `STATS_PX` first).
 pub fn image_stats(image: &DynamicImage) -> ImageStats {
     let small = if image.width().max(image.height()) > STATS_PX {
-        image.thumbnail(STATS_PX, STATS_PX)
+        crate::pv::thumbs::shrink(image, STATS_PX)
     } else {
         image.clone()
     };

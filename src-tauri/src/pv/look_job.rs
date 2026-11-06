@@ -327,21 +327,18 @@ fn fit_my_sony() {
     }
 }
 
-/// Auto on top of the look: does it land near the camera, or brighten twice?
+/// Auto with a look on, computed the way `export_processing::auto_exposure_with_look` does it:
 /// `PV_LOOK_DIR=… PV_LOOK_AUTO=1 cargo test --lib pv::look_job::auto -- --nocapture`
 #[test]
-fn auto_on_my_sony() {
+fn auto_with_looks() {
     let (Ok(dir), Ok(_)) = (std::env::var("PV_LOOK_DIR"), std::env::var("PV_LOOK_AUTO")) else {
         return;
     };
     let dir = Path::new(&dir);
-    let cube = dir.join("My Sony.cube");
     let recipe: Value =
         serde_json::from_str(&std::fs::read_to_string(dir.join("neutral.json")).unwrap()).unwrap();
-    let mut with_look = recipe.clone();
-    with_look["lutPath"] = Value::String(cube.to_string_lossy().into_owned());
-    with_look["lutIntensity"] = Value::from(100);
-    with_look["lutIsSceneReferred"] = Value::Bool(false);
+    let film =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/pv_film_luts/K-Portra 400.cube");
     let mut pairs: Vec<_> = std::fs::read_dir(dir.join("pairs"))
         .unwrap()
         .flatten()
@@ -355,71 +352,222 @@ fn auto_on_my_sony() {
         state: app.state::<AppState>(),
         settings: settings(),
     };
-    let luma = |i: &Image16| {
-        let (mut sum, mut n) = (0f64, 0f64);
-        for p in i.pixels() {
-            sum += (0.2126 * p.0[0] as f64 + 0.7152 * p.0[1] as f64 + 0.0722 * p.0[2] as f64)
-                / 65535.0;
-            n += 1.0;
-        }
-        sum / n
-    };
-    println!("pair | camera luma | look luma, dE | auto+look luma, dE | auto settings");
-    for pair in pairs.iter().step_by(HOLDOUT_EVERY) {
-        let raw = pair.join("raw.ARW");
-        let c = image::open(pair.join("camera.png")).unwrap().to_rgb16();
-        let aspect = c.width() as f64 / c.height() as f64;
-        let path = raw.to_string_lossy().to_string();
-        let bytes = crate::file_management::read_file_mapped(&raw).unwrap();
-        let base = crate::image_loader::load_and_composite(
-            &bytes,
-            &path,
-            &recipe,
-            false,
-            &r.settings,
-            None,
-        )
-        .unwrap();
-        let opts = crate::image_processing::resolve_render_options(&r.settings, true);
-        let exposure = crate::image_processing::effective_baseline_exposure(
-            &recipe,
-            crate::as_shot::as_shot(&path),
-            opts.baseline,
-        );
-        let results = crate::image_processing::perform_auto_analysis(&base, exposure);
-        let auto = crate::image_processing::auto_results_to_json(&results, Default::default());
-        let mut both = with_look.clone();
-        for (k, v) in auto.as_object().unwrap() {
-            if k == "activeTools" {
-                if let (Some(to), Some(from)) = (
-                    both.get_mut(k).and_then(Value::as_object_mut),
-                    v.as_object(),
-                ) {
-                    to.extend(from.clone());
+    let opts = crate::image_processing::resolve_render_options(&r.settings, true);
+    for (name, cube, scene) in [
+        ("My Sony", dir.join("My Sony.cube"), false),
+        ("Portra 400", film, true),
+    ] {
+        let mut with_look = recipe.clone();
+        with_look["lutPath"] = Value::String(cube.to_string_lossy().into_owned());
+        with_look["lutIntensity"] = Value::from(100);
+        with_look["lutIsSceneReferred"] = Value::Bool(scene);
+        println!("{name}: pair | camera luma, | look luma, dE | judged EV | auto+look luma, dE");
+        for pair in pairs.iter().step_by(HOLDOUT_EVERY) {
+            let raw = pair.join("raw.ARW");
+            let c = image::open(pair.join("camera.png")).unwrap().to_rgb16();
+            let aspect = c.width() as f64 / c.height() as f64;
+            let path = raw.to_string_lossy().to_string();
+            let bytes = crate::file_management::read_file_mapped(&raw).unwrap();
+            let base = crate::image_loader::load_and_composite(
+                &bytes,
+                &path,
+                &recipe,
+                false,
+                &r.settings,
+                None,
+            )
+            .unwrap();
+            let exposure = crate::image_processing::effective_baseline_exposure(
+                &recipe,
+                crate::as_shot::as_shot(&path),
+                opts.baseline,
+            );
+            let results = crate::image_processing::perform_auto_analysis(&base, exposure);
+            let auto = crate::image_processing::auto_results_to_json(&results, Default::default());
+            // As the app judges it: a small input through the look, exposure 0.
+            let mut judge = with_look.clone();
+            judge["exposure"] = Value::from(0);
+            crate::hydrate_adjustments(&r.state, &mut judge);
+            let small = crate::pv::thumbs::shrink(&base, 1024);
+            let probe = crate::export_processing::process_image_with_render_options(
+                &path,
+                &small,
+                &judge,
+                &r.context,
+                &r.state,
+                "pv_auto",
+                opts,
+                RenderOutputPrecision::EightBit,
+            )
+            .unwrap();
+            let ev = look::auto_exposure_with_look(look::mean_luma(&probe));
+            let mut both = with_look.clone();
+            for (k, v) in auto.as_object().unwrap() {
+                if k == "activeTools" {
+                    if let (Some(to), Some(from)) = (
+                        both.get_mut(k).and_then(Value::as_object_mut),
+                        v.as_object(),
+                    ) {
+                        to.extend(from.clone());
+                    } else {
+                        both[k] = v.clone();
+                    }
                 } else {
                     both[k] = v.clone();
                 }
-            } else {
-                both[k] = v.clone();
             }
+            both["exposure"] = Value::from(ev);
+            let look_img = to_work(&r.render(&raw, &with_look).unwrap(), aspect);
+            let auto_img = to_work(&r.render(&raw, &both).unwrap(), aspect);
+            println!(
+                "{} | {:.3} | {:.3} {:.2} | {ev:+.2} | {:.3} {:.2}",
+                pair.file_name().unwrap().to_string_lossy(),
+                look::mean_luma(&DynamicImage::ImageRgb16(c.clone())),
+                look::mean_luma(&DynamicImage::ImageRgb16(look_img.clone())),
+                look::score(&samples_of(&look_img, &c), None).0,
+                look::mean_luma(&DynamicImage::ImageRgb16(auto_img.clone())),
+                look::score(&samples_of(&auto_img, &c), None).0,
+            );
         }
-        let look = to_work(&r.render(&raw, &with_look).unwrap(), aspect);
-        // As `calculate_auto_adjustments` does: exposure judged on the look's result.
-        let small = r.render(&raw, &with_look).unwrap().thumbnail(1024, 1024);
-        both["exposure"] = Value::from(look::auto_exposure_with_look(look::mean_luma(&small)));
-        let al = to_work(&r.render(&raw, &both).unwrap(), aspect);
+    }
+}
+
+/// Every film look through the real GPU path: a contact sheet from one photo, and how bright each
+/// comes out against the camera on the held-out pairs (what `EV` in the bake script is tuned from).
+/// `PV_LOOK_DIR=… PV_LOOK_FILM=1 cargo test --lib pv::look_job::film -- --nocapture`
+#[test]
+fn film_contact_sheet() {
+    let (Ok(dir), Ok(_)) = (std::env::var("PV_LOOK_DIR"), std::env::var("PV_LOOK_FILM")) else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    let recipe: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("neutral.json")).unwrap()).unwrap();
+    let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/pv_film_luts");
+    let mut cubes: Vec<_> = std::fs::read_dir(resources)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "cube"))
+        .collect();
+    cubes.sort();
+    let mut pairs: Vec<_> = std::fs::read_dir(dir.join("pairs"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .collect();
+    pairs.sort();
+    let app = tauri::test::mock_app();
+    app.manage(crate::initial_app_state());
+    let r = Renderer {
+        context: gpu(),
+        state: app.state::<AppState>(),
+        settings: settings(),
+    };
+    let opts = crate::image_processing::resolve_render_options(&r.settings, true);
+
+    // Small developed bases, once, so every look only costs a small GPU render.
+    let held: Vec<_> = pairs.iter().step_by(HOLDOUT_EVERY).collect();
+    let bases: Vec<(String, DynamicImage, f64)> = held
+        .iter()
+        .map(|pair| {
+            let raw = pair.join("raw.ARW");
+            let path = raw.to_string_lossy().to_string();
+            let bytes = crate::file_management::read_file_mapped(&raw).unwrap();
+            let base = crate::image_loader::load_and_composite(
+                &bytes,
+                &path,
+                &recipe,
+                false,
+                &r.settings,
+                None,
+            )
+            .unwrap();
+            let camera = look::mean_luma(&image::open(pair.join("camera.png")).unwrap());
+            (path, crate::pv::thumbs::shrink(&base, 1024), camera)
+        })
+        .collect();
+    let camera_median = {
+        let mut v: Vec<f64> = bases.iter().map(|b| b.2).collect();
+        v.sort_by(f64::total_cmp);
+        v[v.len() / 2]
+    };
+    println!("camera median luma {camera_median:.3}");
+
+    let render = |path: &str, base: &DynamicImage, cube: &Path| -> DynamicImage {
+        let mut v = recipe.clone();
+        v["lutPath"] = Value::String(cube.to_string_lossy().into_owned());
+        v["lutIntensity"] = Value::from(100);
+        v["lutIsSceneReferred"] = Value::Bool(true);
+        crate::hydrate_adjustments(&r.state, &mut v);
+        crate::export_processing::process_image_with_render_options(
+            path,
+            base,
+            &v,
+            &r.context,
+            &r.state,
+            "pv_film",
+            opts,
+            RenderOutputPrecision::EightBit,
+        )
+        .unwrap()
+    };
+    // A look that can't be loaded (moved, deleted) renders without it, not black.
+    let (path, base, _) = &bases[2];
+    let missing = render(path, base, Path::new("/nowhere/Gone.cube"));
+    let no_look = {
+        let mut v = recipe.clone();
+        crate::hydrate_adjustments(&r.state, &mut v);
+        crate::export_processing::process_image_with_render_options(
+            path,
+            base,
+            &v,
+            &r.context,
+            &r.state,
+            "pv_film",
+            opts,
+            RenderOutputPrecision::EightBit,
+        )
+        .unwrap()
+    };
+    let (a, b) = (look::mean_luma(&missing), look::mean_luma(&no_look));
+    println!("missing look {a:.3}, no look {b:.3}");
+    assert!(
+        (a - b).abs() < 0.01,
+        "a missing look must render as no look"
+    );
+
+    let (cell_w, cell_h, columns) = (300u32, 200u32, 5u32);
+    let rows = (cubes.len() as u32).div_ceil(columns);
+    let mut sheet = image::RgbImage::new(cell_w * columns, cell_h * rows);
+    println!("look | median luma | range | EV change to reach the camera");
+    for (i, cube) in cubes.iter().enumerate() {
+        let mut lumas = Vec::new();
+        for (path, base, _) in &bases {
+            lumas.push(look::mean_luma(&render(path, base, cube)));
+        }
+        let small = render(&bases[2].0, &bases[2].1, cube)
+            .thumbnail(cell_w, cell_h)
+            .to_rgb8();
+        let (x, y) = (i as u32 % columns * cell_w, i as u32 / columns * cell_h);
+        image::imageops::overlay(&mut sheet, &small, x as i64, y as i64);
+        let mut sorted = lumas.clone();
+        sorted.sort_by(f64::total_cmp);
+        let median = sorted[sorted.len() / 2];
+        let lin = |v: f64| {
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
         println!(
-            "{} | {:.3} | {:.3} {:.2} | {:.3} {:.2} | exp {:.2} con {:.0} hi {:.0} sh {:.0}",
-            pair.file_name().unwrap().to_string_lossy(),
-            luma(&c),
-            luma(&look),
-            look::score(&samples_of(&look, &c), None).0,
-            luma(&al),
-            look::score(&samples_of(&al, &c), None).0,
-            both["exposure"].as_f64().unwrap_or(0.0),
-            auto["contrast"].as_f64().unwrap_or(0.0),
-            auto["highlights"].as_f64().unwrap_or(0.0),
-            auto["shadows"].as_f64().unwrap_or(0.0),
+            "{i} {} | {median:.3} | {:.3}-{:.3} | {:+.2}",
+            cube.file_stem().unwrap().to_string_lossy(),
+            sorted[0],
+            sorted[sorted.len() - 1],
+            (lin(camera_median) / lin(median)).log2()
         );
     }
+    sheet.save(dir.join("film_sheet.jpg")).unwrap();
 }

@@ -2809,10 +2809,15 @@ impl GpuProcessor {
         &self,
         input: &GpuImageEntry,
         mask_texture_view: &wgpu::TextureView,
-        request: RenderRequest,
+        mut request: RenderRequest,
         output_to_display: bool,
         output_precision: RenderOutputPrecision,
     ) -> Result<(RenderedPixels, u32, u32, u32, u32), String> {
+        // PV: a recipe naming a LUT that can't be loaded renders without it. The shader would
+        // otherwise sample the empty placeholder and turn the whole image black.
+        if request.lut.is_none() {
+            request.adjustments.global.has_lut = 0;
+        }
         let input_texture_view = &input.texture_view;
         let gf_coeffs_view = &input.gf_coeffs_view;
         let gf_structure_view = &input.gf_structure_view;
