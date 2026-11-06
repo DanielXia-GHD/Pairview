@@ -26,7 +26,7 @@ import {
   normalizeCropChange,
 } from '../../utils/cropUtils';
 import EditorToolbar from './editor/EditorToolbar';
-import ImageCanvas from './editor/ImageCanvas';
+import ImageCanvas, { ImageRegion, MaskOverlayImage } from './editor/ImageCanvas';
 import SpeedEditOverlay from './editor/overlays/SpeedEditOverlay';
 import { Mask, SubMask } from './right/Masks';
 import { CompareView, Panel, TransformState, Invokes } from '../ui/AppProperties';
@@ -37,6 +37,7 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAiMasking } from '../../hooks/useAiMasking';
 import { useEditorActions, withRotation } from '../../hooks/useEditorActions';
 import { clickZoomTarget, interpretWheel, movedBeyondClick } from '../../utils/canvasControls';
+import { getVisibleImageRegion } from '../../utils/previewResolution';
 
 const parseRgb = (rgbStr: string): [number, number, number, number] => {
   const match = rgbStr.match(/[\d.]+/g);
@@ -49,6 +50,19 @@ const parseRgb = (rgbStr: string): [number, number, number, number] => {
 const NEUTRAL_GREY_RGB: [number, number, number, number] = [128 / 255, 128 / 255, 128 / 255, 1.0];
 
 const NO_SPLIT = { splitOrigin: [0, 0], splitNormal: [0, 0], splitOffset: [0, 0] };
+
+const MASK_OVERLAY_MARGIN = 0.1;
+
+interface MaskOverlayView {
+  width: number;
+  height: number;
+  scale: number;
+  origin: [number, number];
+  region: ImageRegion;
+}
+
+const containsRegion = ([x, y, w, h]: ImageRegion, [ix, iy, iw, ih]: ImageRegion, tolerance = 1e-3) =>
+  ix >= x - tolerance && iy >= y - tolerance && ix + iw <= x + w + tolerance && iy + ih <= y + h + tolerance;
 
 const withClientXShift = <T extends object>(event: T, shift: number): T =>
   new Proxy(event, {
@@ -217,7 +231,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const [isMaskTouchInteracting, setIsMaskTouchInteracting] = useState(false);
   const [isLoaderVisible, setIsLoaderVisible] = useState(false);
   const [showExifDateView, setShowExifDateView] = useState(false);
-  const [maskOverlayUrl, setMaskOverlayUrl] = useState<string | null>(null);
+  const [maskOverlay, setMaskOverlay] = useState<MaskOverlayImage | null>(null);
   const [transformScale, setTransformScale] = useState(1);
 
   const [isShiftPressed, setIsShiftPressed] = useState(false);
@@ -238,6 +252,8 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const splitBoundsRef = useRef<HTMLDivElement>(null);
   const splitLayoutRef = useRef<{ view: CompareView; position: number }>({ view: 'off', position: 0.5 });
   const transformStateRef = useRef<TransformState>({ scale: 1, positionX: 0, positionY: 0 });
+  const viewTransformListenersRef = useRef(new Set<(state: TransformState) => void>());
+  const [overlayRoot, setOverlayRoot] = useState<HTMLDivElement | null>(null);
   const [isPanningState, setIsPanningState] = useState(false);
   const isClickAnimating = useRef(false);
   const clickAnimationTime = 250;
@@ -249,6 +265,9 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
   const [toolbarOverflowVisible, setToolbarOverflowVisible] = useState(!isFullScreen);
   const isGeneratingOverlayRef = useRef(false);
   const pendingOverlayRequestRef = useRef<any>(null);
+  const lastOverlayRequestRef = useRef<any>(null);
+  const maskOverlayViewRef = useRef<MaskOverlayView | null>(null);
+  const refreshMaskOverlayRef = useRef<() => void>(() => {});
   const animationFrameId = useRef<number | null>(null);
   const physicsFrameId = useRef<number | null>(null);
   const activePointers = useRef<Map<number, { x: number; y: number }>>(new Map());
@@ -592,6 +611,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       if (originalContentRef.current) {
         originalContentRef.current.style.transform = transform;
       }
+      viewTransformListenersRef.current.forEach((listener) => listener(transformStateRef.current));
       syncSplitOverlay();
       syncWgpuRef.current();
 
@@ -614,10 +634,20 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       if (zoomDebounceTimeoutRef.current) clearTimeout(zoomDebounceTimeoutRef.current);
       zoomDebounceTimeoutRef.current = window.setTimeout(() => {
         handleZoomed({ scale, positionX: x, positionY: y });
+        refreshMaskOverlayRef.current();
       }, 100);
     },
     [handleZoomed, syncSplitOverlay],
   );
+
+  const subscribeViewTransform = useCallback((listener: (state: TransformState) => void) => {
+    const listeners = viewTransformListenersRef.current;
+    listeners.add(listener);
+    listener(transformStateRef.current);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
 
   const animateTransform = useCallback(
     (targetX: number, targetY: number, targetScale: number, duration: number) => {
@@ -745,6 +775,50 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     },
     [animateTransform, applyTransform, clampToBounds],
   );
+
+  const isCropViewShown = isCropping && !!uncroppedAdjustedPreviewUrl;
+  const wasCropViewShownRef = useRef(isCropViewShown);
+
+  useLayoutEffect(() => {
+    if (wasCropViewShownRef.current === isCropViewShown) return;
+    wasCropViewShownRef.current = isCropViewShown;
+
+    const container = imageContainerRef.current;
+    const crop = getEffectiveCrop();
+    const irs = imageRenderSizeRef.current;
+    const { positionX, positionY, scale } = transformStateRef.current;
+    if (!container || !crop || !selectedImage || !irs.width || !crop.width || scale <= 1.01) return;
+
+    const { width: W, height: H } = getOrientedDimensions(
+      selectedImage.width,
+      selectedImage.height,
+      adjustments.orientationSteps || 0,
+    );
+    const viewportW = irs.width + 2 * irs.offsetX;
+    const viewportH = irs.height + 2 * irs.offsetY;
+    const uncroppedScale = Math.min(viewportW / W, viewportH / H);
+    const uncroppedLeft = (viewportW - W * uncroppedScale) / 2;
+    const uncroppedTop = (viewportH - H * uncroppedScale) / 2;
+    const croppedScale = irs.width / crop.width;
+
+    const centerX = container.clientWidth / 2;
+    const centerY = container.clientHeight / 2;
+    const contentX = (centerX - positionX) / scale;
+    const contentY = (centerY - positionY) / scale;
+
+    const target = isCropViewShown
+      ? {
+          x: uncroppedLeft + (crop.x + (contentX - irs.offsetX) / croppedScale) * uncroppedScale,
+          y: uncroppedTop + (crop.y + (contentY - irs.offsetY) / croppedScale) * uncroppedScale,
+        }
+      : {
+          x: irs.offsetX + ((contentX - uncroppedLeft) / uncroppedScale - crop.x) * croppedScale,
+          y: irs.offsetY + ((contentY - uncroppedTop) / uncroppedScale - crop.y) * croppedScale,
+        };
+
+    const bounded = clampToBounds(centerX - target.x * scale, centerY - target.y * scale, scale);
+    applyTransform(bounded.x, bounded.y, bounded.scale);
+  }, [isCropViewShown, getEffectiveCrop, selectedImage, adjustments.orientationSteps, applyTransform, clampToBounds]);
 
   useImperativeHandle(
     transformWrapperRef,
@@ -1417,20 +1491,49 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
     return () => clearTimeout(timer);
   }, [imageRenderSize, transformScale, handleDisplaySizeChange]);
 
+  const getMaskOverlayView = useCallback((margin: number): MaskOverlayView | null => {
+    const renderSize = imageRenderSizeRef.current;
+    const view = transformStateRef.current;
+    if (!renderSize.scale) return null;
+
+    const padding = (Math.max(renderSize.containerWidth, renderSize.containerHeight) / view.scale) * margin;
+    const region = getVisibleImageRegion(view, renderSize, padding);
+    if (!region) return null;
+
+    const pixelRatio = useSettingsStore.getState().appSettings?.useFullDpiRendering ? window.devicePixelRatio || 1 : 1;
+    const density = Math.max(1, view.scale) * pixelRatio;
+    const [x, y, w, h] = region;
+    const width = Math.max(1, Math.ceil(w * renderSize.width * density));
+    const height = Math.max(1, Math.ceil(h * renderSize.height * density));
+
+    return {
+      width,
+      height,
+      scale: renderSize.scale * density,
+      origin: [(x * renderSize.width) / renderSize.scale, (y * renderSize.height) / renderSize.scale],
+      region: [x, y, width / density / renderSize.width, height / density / renderSize.height],
+    };
+  }, []);
+
   const processOverlayQueue = useCallback(async () => {
     if (isGeneratingOverlayRef.current || !pendingOverlayRequestRef.current) return;
 
-    const { maskDef, renderSize, jsAdjustments } = pendingOverlayRequestRef.current;
+    const { maskDef, jsAdjustments, isLive } = pendingOverlayRequestRef.current;
     pendingOverlayRequestRef.current = null;
 
-    if (!maskDef || !maskDef.visible || renderSize.width === 0) {
-      setMaskOverlayUrl(null);
+    const overlayView = getMaskOverlayView(isLive ? 0 : MASK_OVERLAY_MARGIN);
+    if (!maskDef || !maskDef.visible || !overlayView) {
+      maskOverlayViewRef.current = null;
+      setMaskOverlay(null);
       return;
     }
 
     isGeneratingOverlayRef.current = true;
     try {
-      const cropOffset = [jsAdjustments.crop?.x || 0, jsAdjustments.crop?.y || 0];
+      const cropOffset = [
+        (jsAdjustments.crop?.x || 0) + overlayView.origin[0],
+        (jsAdjustments.crop?.y || 0) + overlayView.origin[1],
+      ];
 
       const { patchesSentToBackend } = useEditorStore.getState();
 
@@ -1451,44 +1554,62 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
 
       const buffer: ArrayBuffer = await invoke(Invokes.GenerateMaskOverlay, {
         cropOffset,
-        height: Math.round(renderSize.height),
+        height: overlayView.height,
         maskDef: strippedMaskDef,
-        scale: renderSize.scale,
-        width: Math.round(renderSize.width),
+        scale: overlayView.scale,
+        width: overlayView.width,
         jsAdjustments: strippedAdjustments,
       });
       markSent();
 
       if (buffer && buffer.byteLength > 0) {
-        setMaskOverlayUrl(URL.createObjectURL(new Blob([buffer], { type: 'image/png' })));
+        const url = URL.createObjectURL(new Blob([buffer], { type: 'image/png' }));
+        const image = new Image();
+        image.src = url;
+        await image.decode().catch(() => {});
+        maskOverlayViewRef.current = overlayView;
+        setMaskOverlay({ url, region: overlayView.region });
       } else {
-        setMaskOverlayUrl(null);
+        maskOverlayViewRef.current = null;
+        setMaskOverlay(null);
       }
     } catch (e) {
       console.error('Failed to generate live mask overlay:', e);
-      setMaskOverlayUrl(null);
+      maskOverlayViewRef.current = null;
+      setMaskOverlay(null);
     } finally {
       isGeneratingOverlayRef.current = false;
       if (pendingOverlayRequestRef.current) {
         requestAnimationFrame(processOverlayQueue);
       }
     }
-  }, []);
+  }, [getMaskOverlayView]);
 
   useEffect(() => {
-    if (!maskOverlayUrl) return;
+    const url = maskOverlay?.url;
+    if (!url) return;
     return () => {
-      setTimeout(() => URL.revokeObjectURL(maskOverlayUrl), 1000);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
-  }, [maskOverlayUrl]);
+  }, [maskOverlay?.url]);
 
   const requestMaskOverlay = useCallback(
-    (maskDef: any, renderSize: any, currentAdjustments: any) => {
-      pendingOverlayRequestRef.current = { maskDef, renderSize, jsAdjustments: currentAdjustments };
+    (maskDef: any, currentAdjustments: any, isLive = false) => {
+      lastOverlayRequestRef.current = maskDef;
+      pendingOverlayRequestRef.current = { maskDef, jsAdjustments: currentAdjustments, isLive };
       processOverlayQueue();
     },
     [processOverlayQueue],
   );
+
+  refreshMaskOverlayRef.current = () => {
+    const shown = maskOverlayViewRef.current;
+    const maskDef = lastOverlayRequestRef.current;
+    const needed = getMaskOverlayView(0);
+    if (!shown || !maskDef || !needed) return;
+    if (containsRegion(shown.region, needed.region) && shown.scale >= needed.scale * 0.95) return;
+    requestMaskOverlay(maskDef, useEditorStore.getState().adjustments);
+  };
 
   const handleLiveMaskPreview = useCallback(
     (maskDef: any) => {
@@ -1500,9 +1621,9 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
           opacity: 100,
         };
       }
-      requestMaskOverlay(normalizedDef, imageRenderSize, useEditorStore.getState().adjustments);
+      requestMaskOverlay(normalizedDef, useEditorStore.getState().adjustments, true);
     },
-    [imageRenderSize, requestMaskOverlay],
+    [requestMaskOverlay],
   );
 
   const handleSelectAiPatchContainer = useCallback(
@@ -1806,7 +1927,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       'lensDistortionAmount',
       'lensVignetteAmount',
       'lensTcaAmount',
-      'lensDistortionParams',
+      'lensCorrectionMode',
       'lensMaker',
       'lensModel',
       'lensDistortionEnabled',
@@ -1877,7 +1998,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
       }
     }
 
-    requestMaskOverlay(maskDefForOverlay, imageRenderSize, useEditorStore.getState().adjustments);
+    requestMaskOverlay(maskDefForOverlay, useEditorStore.getState().adjustments);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     overlayTriggerHash,
@@ -2608,7 +2729,7 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
               isStraightenActive={isStraightenActive}
               isRotationActive={isRotationActive}
               isSliderDragging={isSliderDragging}
-              maskOverlayUrl={maskOverlayUrl}
+              maskOverlay={maskOverlay}
               onGenerateAiMask={handleGenerateAiMask}
               onSelectAiPatchContainer={handleSelectAiPatchContainer}
               onSelectMaskContainer={handleSelectMaskContainer}
@@ -2635,8 +2756,11 @@ export default function Editor({ onBackToLibrary, onContextMenu, onImageSelect, 
               liveRotation={liveRotation}
               transformScale={transformScale}
               hasRenderedFirstFrame={hasRenderedFirstFrame}
+              overlayRoot={overlayRoot}
+              subscribeViewTransform={subscribeViewTransform}
             />
           </div>
+          <div ref={setOverlayRoot} className="absolute inset-0 overflow-hidden pointer-events-none" />
           {isSplitActive && (
             <>
               <div ref={originalClipRef} className="absolute inset-0 pointer-events-none">
