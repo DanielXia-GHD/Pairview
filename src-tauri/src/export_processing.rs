@@ -1076,6 +1076,32 @@ fn process_image_for_export_pipeline(
     app_handle: &tauri::AppHandle,
     output_precision: RenderOutputPrecision,
 ) -> Result<DynamicImage, String> {
+    let render = resolve_render_options_from_handle(app_handle, is_raw);
+    process_image_with_render_options(
+        path,
+        base_image,
+        js_adjustments,
+        context,
+        state,
+        debug_tag,
+        render,
+        output_precision,
+    )
+}
+
+// PV: split so pv tests can render without an AppHandle.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn process_image_with_render_options(
+    path: &str,
+    base_image: &DynamicImage,
+    js_adjustments: &Value,
+    context: &GpuContext,
+    state: &tauri::State<AppState>,
+    debug_tag: &str,
+    render: RenderOptions,
+    output_precision: RenderOutputPrecision,
+) -> Result<DynamicImage, String> {
+    let is_raw = is_raw_file(path);
     let (fitted, scale) = fit_to_gpu(context, base_image);
     let source = RenderSource::edited(
         &fitted,
@@ -1108,7 +1134,6 @@ fn process_image_for_export_pipeline(
         })
         .collect();
 
-    let render = resolve_render_options_from_handle(app_handle, is_raw);
     let mut all_adjustments =
         get_all_adjustments_from_json(js_adjustments, is_raw, as_shot(path), render);
     all_adjustments.global.show_clipping = 0;

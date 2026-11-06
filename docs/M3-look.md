@@ -1,0 +1,26 @@
+# "My Sony" look (M3-06)
+
+A 33-point 3D LUT that turns RapidRAW's neutral render of an A7C II RAW into what the camera put in its HIF. Fitted 2026-11-05 from the owner's own pairs. Installed as `My Sony.cube` in the app's `luts` folder (`~/Library/Application Support/com.danielxia.pairview/luts/`), where RapidRAW's LUT picker lists it.
+
+**Method.** 60 ARW+HIF pairs, one at a time across the 2025-06 to 2026-10 shoots, copied read-only from the NAS. RAWs rendered through the export pipeline at full resolution with default settings; both sides reduced to 768 px and compared as aligned 4×4 blocks, skipping edges. Per-channel tone curves first, then a smooth 3D correction that fades back to the curves where there's no data. Every 5th pair never trained the look. Code: `pv/look.rs` (fit, tests), `pv/look_job.rs` (job).
+
+```sh
+PV_LOOK_DIR=/path/to/lookfit cargo test --lib pv::look_job -- --nocapture
+```
+
+**Result on the 12 held-out pairs** (CIEDE2000; about 1 is barely visible side by side, 2–3 noticeable if you look for it):
+
+| | Neutral render | With My Sony |
+|---|---|---|
+| Median of per-photo medians | 13.13 | **1.17** |
+| All pixels, median | 13.83 | 1.50 |
+| All pixels, 95th percentile | | 4.30 |
+| Worst photo (median) | 18.67 | 3.83 |
+
+Through the real GPU path on 3 held-out pairs: 1.11, 0.74, 1.65, matching the CPU check (1.13, 0.74, 1.73).
+
+**Limits.**
+- These numbers skip edges and textured blocks, where a pixel of misalignment would swamp the measure. Smooth areas decide the look, but this is not a whole-image score.
+- A single LUT can't reproduce what varies per photo. 1 of 48 training pairs was left out (ΔE > 8): a dusk scene where the camera lifted the whole image much further than usual. Scenes like that will come out darker than the camera's file.
+- Fitted on one camera with its usual settings, and only against sRGB-decoded HIFs. Another camera needs its own fit.
+- It depends on RapidRAW's default tone mapper (`agx`). Changing the default or a large upstream change to the pipeline means fitting again.

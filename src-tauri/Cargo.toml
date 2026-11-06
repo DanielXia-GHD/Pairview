@@ -133,6 +133,10 @@ wayland-client = "0.31"
 wayland-backend = { version = "0.3", features = ["client_system"] }
 wayland-protocols = { version = "0.32", features = ["client"] }
 
+[dev-dependencies]
+# PV: pv::look_job renders headless through a mock app.
+tauri = { version = "2.12", features = ["test"] }
+
 [build-dependencies]
 tauri-build = { version = "2.6", features = [] }
 sha2 = "0.11"
