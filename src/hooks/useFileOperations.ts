@@ -13,6 +13,7 @@ import { Status } from '../components/ui/ExportImportProperties';
 import { formatBytes } from '../utils/formatBytes';
 import { chooseDelete, pvPhotosFor } from '../pv/delete/choose'; // PV: Pairview delete dialog
 import { setPvRefresh, toastDeleted } from '../pv/delete/undo'; // PV: undo deletes
+import { setPvOpenEditor } from '../pv/grid/keys'; // PV: E in the grid
 import type { DeleteResult, DeleteScope } from '../pv/api';
 
 export const transferFiles = (kind: JobKind.Copy | JobKind.Move, sourcePaths: string[], destinationFolder: string) =>
@@ -33,6 +34,8 @@ export function useFileOperations(
 
   // PV: Pairview's undo reloads the grid the same way a delete does.
   useEffect(() => setPvRefresh(refreshImageList), [refreshImageList]);
+  // PV: E in the grid opens a Photo's RAW in the editor.
+  useEffect(() => setPvOpenEditor((path) => void handleImageSelect(path)), [handleImageSelect]);
 
   const getParentDir = (filePath: string): string => {
     const separator = filePath.includes('/') ? '/' : '\\';

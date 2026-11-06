@@ -6,7 +6,7 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useUIStore } from '../../store/useUIStore';
 import { pvApi, type KeepRaw } from '../api';
 import { pvPhotosFor } from '../delete/choose';
-import { usePvPhotoStore } from '../store';
+import { pvPhotoForPath, usePvPhotoStore } from '../store';
 import { usePvViewer } from '../viewer/PvViewer';
 import { refuseIfOffline } from '../offline';
 
@@ -17,7 +17,28 @@ const isTyping = () => {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el as HTMLElement)?.isContentEditable;
 };
 
+let openEditor: (path: string) => void = () => {};
+
+/** Upstream's file operations register how to open the editor. */
+export function setPvOpenEditor(open: (path: string) => void) {
+  openEditor = open;
+}
+
+/** E in the grid opens the editor on the active Photo's RAW (its grid path, A4), M3-01. */
+function onEditKey(e: KeyboardEvent) {
+  const { libraryActivePath, multiSelectedPaths } = useLibraryStore.getState();
+  const path = libraryActivePath ?? multiSelectedPaths[0];
+  if (!path || !pvPhotoForPath(path)) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  openEditor(path);
+}
+
 export function onGridKey(e: KeyboardEvent) {
+  if (e.key.toLowerCase() === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+    if (useUIStore.getState().activeView === 'library' && !isTyping() && !usePvViewer.getState().path) onEditKey(e);
+    return;
+  }
   if (e.key.toLowerCase() !== 'k' || e.metaKey || e.ctrlKey || e.altKey) return;
   if (useUIStore.getState().activeView !== 'library' || isTyping() || usePvViewer.getState().path) return;
   const photos = pvPhotosFor(useLibraryStore.getState().multiSelectedPaths);
