@@ -379,8 +379,7 @@ pub fn pv_list_images_for_path(
                     None => return Ok(Some((Vec::new(), HashMap::new(), Vec::new()))),
                 }
             } else {
-                let Some((folder_id, false)) = queries::folder_at_path(cat, Path::new(&path))?
-                else {
+                let Some(folder_id) = queries::listing_folder(cat, Path::new(&path))? else {
                     return Ok(None);
                 };
                 Scope::Folder {

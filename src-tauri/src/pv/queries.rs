@@ -323,6 +323,24 @@ pub fn list_photos(
 
 /// The catalog folder at an absolute path, if it's inside a location and has been scanned.
 /// Returns (folder id, is a format sub-folder).
+/// The folder whose Photos to list for `path`. A format sub-folder (`arw/`, `hif/`, reached through
+/// RapidRAW's own folder tree) lists its shoot: inside a location the grid always shows Photos, so
+/// the viewer, Done and the Keep-RAW tools work and E opens the RAW + recipe, not a loose file.
+pub fn listing_folder(cat: &Catalog, path: &std::path::Path) -> Result<Option<i64>> {
+    let Some((folder_id, format_subdir)) = folder_at_path(cat, path)? else {
+        return Ok(None);
+    };
+    if !format_subdir {
+        return Ok(Some(folder_id));
+    }
+    let parent: Option<i64> = cat.conn().query_row(
+        "SELECT parent_id FROM folders WHERE id = ?1",
+        [folder_id],
+        |r| r.get(0),
+    )?;
+    Ok(Some(parent.unwrap_or(folder_id)))
+}
+
 pub fn folder_at_path(cat: &Catalog, path: &std::path::Path) -> Result<Option<(i64, bool)>> {
     for location in crate::pv::locations::list(cat)? {
         let Ok(rel) = path.strip_prefix(&location.path) else {
@@ -800,6 +818,20 @@ mod tests {
             Some(folder(&cat, ""))
         );
         assert_eq!(folder_at_path(&cat, &root.join("nope")).unwrap(), None);
+        // arw/ and hif/ list the shoot's Photos; anything else lists itself, or nothing.
+        let shoot_id = shoot.unwrap().0;
+        for sub in ["arw", "hif"] {
+            assert_eq!(
+                listing_folder(&cat, &root.join("2026-10-24_10361024").join(sub)).unwrap(),
+                Some(shoot_id),
+                "{sub}"
+            );
+        }
+        assert_eq!(
+            listing_folder(&cat, &root.join("2026-10-24_10361024")).unwrap(),
+            Some(shoot_id)
+        );
+        assert_eq!(listing_folder(&cat, &root.join("nope")).unwrap(), None);
         assert_eq!(
             folder_at_path(&cat, std::path::Path::new("/elsewhere")).unwrap(),
             None
