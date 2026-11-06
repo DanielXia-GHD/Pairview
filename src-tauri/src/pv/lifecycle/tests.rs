@@ -1443,3 +1443,233 @@ fn the_edited_marker_survives_a_catalog_rebuild() {
     let text = fs::read_to_string(f.abs("2026-10-23_1/arw/DSC0002.xmp")).unwrap();
     assert!(crate::pv::xmp::read(&text).edited.is_none());
 }
+
+// ---- M3-03: Revert ----
+
+const PAIR: &[&str] = &[
+    "s/arw/DSC0001.ARW",
+    "s/arw/DSC0001.ARW.rrdata",
+    "s/hif/DSC0001.HIF",
+    "s/arw/DSC0002.ARW",
+    "s/hif/DSC0002.HIF",
+];
+
+#[test]
+fn revert_brings_the_camera_original_back_and_sets_the_recipe_aside() {
+    let mut f = Fixture::new(PAIR);
+    let before = f.library();
+    let p = f.photo("dsc0001");
+    let done = replace_display(&mut f.cat, p, b"render").unwrap();
+    assert!(!done.kept_as_base);
+    assert!(can_revert(&mut f.cat, p).unwrap());
+
+    let r = revert_display(&mut f.cat, p).unwrap();
+    let lib = f.library();
+    assert_eq!(
+        lib["s/hif/DSC0001.HIF"], before["s/hif/DSC0001.HIF"],
+        "camera bytes"
+    );
+    assert_eq!(lib["s/arw/DSC0001.ARW"], before["s/arw/DSC0001.ARW"]);
+    assert!(
+        !lib.contains_key("s/arw/DSC0001.ARW.rrdata"),
+        "recipe set aside"
+    );
+    assert_eq!(state_of(&f, p), "raw_display");
+
+    // Render and recipe are in Recently Deleted; the operation that held the original is gone.
+    let t = f.trash();
+    assert_eq!(t[&format!("{}/s/hif/DSC0001.HIF", r.op_id)], b"render");
+    assert_eq!(
+        t[&format!("{}/s/arw/DSC0001.ARW.rrdata", r.op_id)],
+        before["s/arw/DSC0001.ARW.rrdata"]
+    );
+    assert!(!f.root.join(TRASH_DIR).join(&done.op_id).exists());
+    assert!(!can_revert(&mut f.cat, p).unwrap());
+    assert!(
+        revert_display(&mut f.cat, p).is_err(),
+        "nothing left to revert"
+    );
+    // Catalog and disk agree after a scan.
+    f.rescan();
+    assert_eq!(state_of(&f, p), "raw_display");
+    assert_eq!(f.files_in_catalog(), 4);
+}
+
+#[test]
+fn revert_finds_the_camera_file_after_several_renders_and_cycles() {
+    let mut f = Fixture::new(PAIR);
+    let camera = f.library()["s/hif/DSC0001.HIF"].clone();
+    let p = f.photo("dsc0001");
+    replace_display(&mut f.cat, p, b"one").unwrap();
+    replace_display(&mut f.cat, p, b"two").unwrap();
+    revert_display(&mut f.cat, p).unwrap();
+    assert_eq!(f.library()["s/hif/DSC0001.HIF"], camera);
+    // Edit again: older renders still sit in Recently Deleted, but only the camera file counts.
+    replace_display(&mut f.cat, p, b"three").unwrap();
+    revert_display(&mut f.cat, p).unwrap();
+    assert_eq!(f.library()["s/hif/DSC0001.HIF"], camera);
+}
+
+#[test]
+fn revert_rolls_back_from_every_crash_point() {
+    for interrupt in [
+        Interrupt::Crash(0),
+        Interrupt::Crash(1),
+        Interrupt::Crash(2),
+        Interrupt::Fail(1),
+        Interrupt::Fail(2),
+    ] {
+        let mut f = Fixture::new(PAIR);
+        let p = f.photo("dsc0001");
+        replace_display(&mut f.cat, p, b"render").unwrap();
+        let library = f.library();
+        let trash = f.trash();
+        INTERRUPT.with(|i| i.set(Some(interrupt)));
+        let r = revert_display(&mut f.cat, p);
+        INTERRUPT.with(|i| i.set(None));
+        assert!(r.is_err());
+        recover(&mut f.cat).unwrap();
+        assert_eq!(f.library(), library, "library");
+        assert_eq!(f.trash(), trash, "Recently Deleted");
+        assert_eq!(state_of(&f, p), "edited");
+        // And it still works afterwards.
+        revert_display(&mut f.cat, p).unwrap();
+    }
+}
+
+#[test]
+fn revert_is_refused_once_the_original_was_purged() {
+    let mut f = Fixture::new(PAIR);
+    let p = f.photo("dsc0001");
+    replace_display(&mut f.cat, p, b"render").unwrap();
+    purge(&mut f.cat, f.location, None, None).unwrap();
+    assert!(!can_revert(&mut f.cat, p).unwrap());
+    let err = revert_display(&mut f.cat, p).unwrap_err();
+    assert!(err.to_string().contains("no longer available"), "{err}");
+    assert_eq!(f.library()["s/hif/DSC0001.HIF"], b"render");
+}
+
+#[test]
+fn revert_refused_offline_and_without_an_edit() {
+    let mut f = Fixture::new(PAIR);
+    let plain = f.photo("dsc0002");
+    assert!(!can_revert(&mut f.cat, plain).unwrap());
+    assert!(revert_display(&mut f.cat, plain).is_err());
+    let p = f.photo("dsc0001");
+    replace_display(&mut f.cat, p, b"render").unwrap();
+    let everything = snapshot(&f.root, &|_| true);
+    f.go_offline();
+    assert!(!can_revert(&mut f.cat, p).unwrap());
+    assert!(
+        revert_display(&mut f.cat, p)
+            .unwrap_err()
+            .to_string()
+            .contains("offline")
+    );
+    assert_eq!(snapshot(&f.root, &|_| true), everything);
+}
+
+// ---- M3-03: the hidden base of a Photo without a RAW ----
+
+const NO_RAW: &[&str] = &["s/DSC0003.HIF", "s/DSC0004.HIF"];
+
+#[test]
+fn first_edit_without_a_raw_keeps_the_original_as_the_hidden_base() {
+    let mut f = Fixture::new(NO_RAW);
+    let before = f.library();
+    let p = f.photo("dsc0003");
+    let r = replace_display(&mut f.cat, p, b"render").unwrap();
+    assert!(r.kept_as_base);
+    assert_eq!(f.library()["s/DSC0003.HIF"], b"render");
+    assert_eq!(
+        f.library()["s/.originals/DSC0003.HIF"],
+        before["s/DSC0003.HIF"]
+    );
+    assert!(
+        f.trash().is_empty(),
+        "the base isn't in Recently Deleted: {:?}",
+        f.trash().keys()
+    );
+
+    // RapidRAW's reads get the base; the viewer's exact reads get the render.
+    let display = f.abs("s/DSC0003.HIF");
+    let mapped = crate::file_management::read_file_mapped(&display).unwrap();
+    assert_eq!(&mapped[..], &before["s/DSC0003.HIF"][..]);
+    let exact = crate::file_management::read_file_mapped_exact(&display).unwrap();
+    assert_eq!(&exact[..], b"render");
+    let other = crate::file_management::read_file_mapped(&f.abs("s/DSC0004.HIF")).unwrap();
+    assert_eq!(&other[..], &before["s/DSC0004.HIF"][..]);
+
+    // The scanner never sees it.
+    f.rescan();
+    assert_eq!(f.photos_in_catalog(), 2);
+    assert_eq!(f.files_in_catalog(), 2);
+
+    // Later renders replace the render; the base stays put.
+    let second = replace_display(&mut f.cat, p, b"render two").unwrap();
+    assert!(!second.kept_as_base);
+    assert_eq!(
+        f.library()["s/.originals/DSC0003.HIF"],
+        before["s/DSC0003.HIF"]
+    );
+    assert_eq!(
+        f.trash()[&format!("{}/s/DSC0003.HIF", second.op_id)],
+        b"render"
+    );
+
+    // Revert: the original back, no hidden folder left.
+    revert_display(&mut f.cat, p).unwrap();
+    assert_eq!(f.library(), before);
+    assert!(!f.abs("s/.originals").exists());
+    assert!(!can_revert(&mut f.cat, p).unwrap());
+}
+
+#[test]
+fn first_edit_without_a_raw_rolls_back_from_every_crash_point() {
+    for (interrupt, crash) in [
+        (Interrupt::Crash(0), true),
+        (Interrupt::Crash(1), true),
+        (Interrupt::Fail(0), false),
+        (Interrupt::Fail(1), false),
+    ] {
+        let mut f = Fixture::new(NO_RAW);
+        let before = f.library();
+        let p = f.photo("dsc0003");
+        INTERRUPT.with(|i| i.set(Some(interrupt)));
+        let r = replace_display(&mut f.cat, p, b"render");
+        INTERRUPT.with(|i| i.set(None));
+        assert!(r.is_err());
+        if crash {
+            assert_eq!(recover(&mut f.cat).unwrap().rolled_back, 1);
+        }
+        assert_eq!(f.library(), before);
+        assert!(!f.abs("s/.originals").exists(), "no empty folder left");
+        assert_eq!(
+            fs::read_dir(f.abs("s")).unwrap().count(),
+            2,
+            "no temp file left"
+        );
+    }
+}
+
+#[test]
+fn deleting_an_edited_photo_without_a_raw_takes_its_base_and_undo_brings_it_back() {
+    let mut f = Fixture::new(NO_RAW);
+    let p = f.photo("dsc0003");
+    replace_display(&mut f.cat, p, b"render").unwrap();
+    let edited = f.library();
+    let done = f.delete(&[p], Scope::Photo).unwrap();
+    assert_eq!(done.files, 2);
+    assert_eq!(f.library().keys().collect::<Vec<_>>(), ["s/DSC0004.HIF"]);
+    assert!(!f.abs("s/.originals").exists());
+    undo_last(&mut f.cat).unwrap().unwrap();
+    assert_eq!(f.library(), edited);
+}
+
+#[test]
+fn a_photo_with_a_raw_never_gets_a_base() {
+    let mut f = Fixture::new(PAIR);
+    let p = f.photo("dsc0001");
+    replace_display(&mut f.cat, p, b"render").unwrap();
+    assert!(!f.abs("s/hif/.originals").exists());
+}

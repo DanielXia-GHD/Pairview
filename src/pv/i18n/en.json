@@ -239,7 +239,8 @@
       "empty": "Nothing in Recently Deleted.",
       "loading": "Loading…",
       "offline": "{{name}} is offline; its Recently Deleted shows when it's connected.",
-      "close": "Close"
+      "close": "Close",
+      "replacedHint": "To put a camera original back, open the photo in the editor (E) and use Revert. Restore here keeps the current edited file, so an original would stay in this list."
     },
     "orphans": {
       "banner_one": "{{count}} RAW lost its display copy",
@@ -343,7 +344,14 @@
       "button": "Done",
       "rendering": "Rendering…",
       "hint": "Render this edit at full size and replace the {{display}}. The one it replaces goes to Recently Deleted for 30 days; the RAW and your edits stay.",
-      "done": "New {{display}} saved ({{size}}). The old one is in Recently Deleted."
+      "done": "New {{display}} saved ({{size}}). The old one is in Recently Deleted.",
+      "doneBase": "New {{display}} saved ({{size}}). The original is kept hidden, so you can revert any time.",
+      "revert": "Revert",
+      "revertHint": "Put the original {{display}} back and clear this photo's edits.",
+      "revertTitle": "Revert this photo?",
+      "revertMessage": "The original {{display}} comes back. The edited {{display}} and your edits go to Recently Deleted for 30 days.",
+      "revertConfirm": "Revert",
+      "reverted": "The original {{display}} is back."
     }
   }
 }

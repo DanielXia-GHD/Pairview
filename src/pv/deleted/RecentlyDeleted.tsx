@@ -246,6 +246,9 @@ function RecentlyDeletedView({ onClose, onRestored }: { onClose(): void; onResto
             {t('pv.deleted.offline', { name: l.name })}
           </Text>
         ))}
+        {shown === 'replaced' && ops.length > 0 && (
+          <Text className="mb-4 text-sm text-text-secondary">{t('pv.deleted.replacedHint')}</Text>
+        )}
         {byReason(shown).map(({ location, op }) => (
           <OpSection
             key={`${location.locationId}/${op.opId}`}

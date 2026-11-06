@@ -651,6 +651,22 @@ impl Builder {
                 role: m.role.clone(),
                 photo: Some(index),
             });
+            // The hidden original of an edited Photo without a RAW goes with its display copy.
+            if !has_raw && m.is_primary() {
+                let base_rel = join(&join(&m.folder, super::BASE_DIR), &m.name);
+                if let Some(location) = crate::pv::locations::get(cat, info.location_id)?
+                    && let Ok(meta) = std::fs::symlink_metadata(location.path.join(&base_rel))
+                    && meta.is_file()
+                {
+                    op.files.push(PlannedFile {
+                        file_id: None,
+                        rel: base_rel,
+                        size: meta.len(),
+                        role: "base".into(),
+                        photo: Some(index),
+                    });
+                }
+            }
         }
         if !op.shoots.contains(&info.shoot_id) {
             op.shoots.push(info.shoot_id);

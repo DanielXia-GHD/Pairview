@@ -56,6 +56,10 @@ pub struct Manifest {
     /// A restore folds each copy back into its original so a Photo never ends up with two.
     #[serde(default)]
     pub xmp_copies: Vec<(String, String)>,
+    /// What an overwrite replaced was itself a render, not the camera's original (Revert looks
+    /// for the latter).
+    #[serde(default)]
+    pub replaced_render: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

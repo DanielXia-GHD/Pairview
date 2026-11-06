@@ -1407,6 +1407,15 @@ pub fn is_cloud_placeholder(path: &Path) -> bool {
 }
 
 pub fn read_file_mapped(path: &Path) -> Result<Mmap, ReadFileError> {
+    // PV: a Photo without a RAW edits from its hidden base, not its rendered copy (pv/lifecycle).
+    match crate::pv::lifecycle::existing_base(path) {
+        Some(base) => read_file_mapped_exact(&base),
+        None => read_file_mapped_exact(path),
+    }
+}
+
+// PV: split out of `read_file_mapped`, for reads that want this very file.
+pub fn read_file_mapped_exact(path: &Path) -> Result<Mmap, ReadFileError> {
     if !path.is_file() {
         return Err(ReadFileError::Invalid);
     }

@@ -20,21 +20,15 @@ const HEIF_QUALITY: f32 = 0.8;
 /// PRD §6.4.
 const JPEG_QUALITY: u8 = 92;
 
-/// What Done needs before the expensive render: the Photo's display copy, and that it has a RAW
-/// (a display-only Photo needs the hidden base of M3-03 first).
+/// What Done needs before the expensive render: the Photo's display copy, in a format it can
+/// write back. A Photo without a RAW keeps its original as the hidden base (`lifecycle`).
 pub fn display_to_replace(cat: &Catalog, photo_id: i64) -> Result<PathBuf> {
-    let (display, has_raw): (Option<i64>, bool) = cat.conn().query_row(
-        "SELECT p.display_file_id,
-                EXISTS (SELECT 1 FROM photo_members m WHERE m.photo_id = p.id AND m.role = 'raw')
-         FROM photos p WHERE p.id = ?1",
+    let display: Option<i64> = cat.conn().query_row(
+        "SELECT display_file_id FROM photos WHERE id = ?1",
         [photo_id],
-        |r| Ok((r.get(0)?, r.get(1)?)),
+        |r| r.get(0),
     )?;
     let display = display.ok_or_else(|| anyhow!("this Photo has no display copy to replace"))?;
-    ensure!(
-        has_raw,
-        "editing a Photo without a RAW isn't available yet: its only copy would be replaced"
-    );
     let path = assets::file_path(cat, display)?;
     ensure!(
         output_format(&path).is_some(),
@@ -84,6 +78,25 @@ pub fn encode_like(display: &Path, image: &DynamicImage) -> Result<Vec<u8>> {
         }
         None => bail!("{} isn't a HIF or JPG", display.display()),
     }
+}
+
+/// Revert: the original back under its name, render and recipe to Recently Deleted, ✎ cleared.
+pub fn revert(cat: &mut Catalog, photo_id: i64) -> Result<lifecycle::Reverted> {
+    let reverted = lifecycle::revert_display(cat, photo_id)?;
+    if let Err(e) = metadata::mark_edited(cat, photo_id, None) {
+        log::warn!("Pairview: Photo {photo_id}: edited marker not cleared: {e:#}");
+    }
+    let shoot: Result<i64, _> = cat.conn().query_row(
+        "SELECT shoot_folder_id FROM photos WHERE id = ?1",
+        [photo_id],
+        |r| r.get(0),
+    );
+    if let Ok(shoot) = shoot
+        && let Err(e) = l1::run(cat, &[shoot])
+    {
+        log::warn!("Pairview: Photo {photo_id}: EXIF not re-read: {e:#}");
+    }
+    Ok(reverted)
 }
 
 /// Decodes the encoded file and checks it is the size that was rendered.
@@ -221,24 +234,22 @@ mod tests {
     }
 
     #[test]
-    fn display_only_and_other_formats_are_refused_before_rendering() {
+    fn other_formats_are_refused_before_rendering() {
         let original = jpeg(&picture(64, 48, 200));
-        let (_tmp, cat, photo, path) = fixture("DSC0001.JPG", &original);
+        let (_tmp, cat, photo, _path) = fixture("DSC0001.JPG", &original);
         assert!(display_to_replace(&cat, photo).is_ok());
-        fs::remove_file(
-            path.parent()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join("arw/DSC0001.ARW"),
-        )
-        .unwrap();
-        cat.conn()
-            .execute("DELETE FROM files WHERE name = 'DSC0001.ARW'", [])
-            .unwrap();
-        let err = display_to_replace(&cat, photo).unwrap_err();
-        assert!(err.to_string().contains("without a RAW"), "{err}");
         assert_eq!(output_format(Path::new("x.png")), None);
+    }
+
+    #[test]
+    fn done_then_revert_on_a_jpg_brings_the_original_back() {
+        let original = jpeg(&picture(64, 48, 200));
+        let (_tmp, mut cat, photo, path) = fixture("DSC0001.JPG", &original);
+        finish(&mut cat, photo, &picture(128, 96, 60)).unwrap();
+        assert_ne!(fs::read(&path).unwrap(), original);
+        revert(&mut cat, photo).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert_eq!(state(&cat, photo), "raw_display");
     }
 
     /// Real camera file: `PV_FIXTURES=~/Desktop/2026-10-23_10261023 cargo test --lib pv::edit::real -- --nocapture`

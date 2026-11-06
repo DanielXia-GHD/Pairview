@@ -46,6 +46,9 @@ pub use plan::{OpPlan, Plan, Scope, SkipReason, plan_delete, plan_photos};
 
 /// Recently Deleted folder at each location root. The scanner skips dot-folders.
 pub const TRASH_DIR: &str = ".pairview-deleted";
+/// Hidden originals of Photos without a RAW, next to the display copy (PRD §6.4). A dot-folder, so
+/// the scanner skips it.
+pub const BASE_DIR: &str = ".originals";
 pub const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 /// Retention for everything in Recently Deleted (PRD D12).
 pub const RETENTION_MS: i64 = 30 * DAY_MS;
@@ -176,6 +179,7 @@ fn trash(cat: &mut Catalog, op: &OpPlan, action: &str) -> Result<Done> {
         photos: op.photos.clone(),
         action_id: Some(action.to_string()),
         xmp_copies: Vec::new(),
+        replaced_render: false,
     };
 
     // Write-ahead: the op-log row exists before anything on disk changes.
@@ -211,6 +215,12 @@ fn trash(cat: &mut Catalog, op: &OpPlan, action: &str) -> Result<Done> {
         log::warn!("Pairview: {op_id} committed but its manifest wasn't updated: {e:#}");
     }
 
+    // A hidden-base folder emptied by this delete.
+    for f in op.files.iter().filter(|f| f.role == "base") {
+        if let Some(parent) = safe_join(&root, &f.rel)?.parent() {
+            let _ = fs::remove_dir(parent);
+        }
+    }
     if let Err(e) = forget_files(cat, op) {
         // The files are in Recently Deleted either way; the watcher's next scan catches up.
         log::warn!("Pairview: {op_id}: catalog not updated: {e:#}");
@@ -272,51 +282,153 @@ pub struct Replaced {
     /// Bytes of the file that went to Recently Deleted.
     pub replaced_bytes: u64,
     pub new_bytes: u64,
+    /// The old file became the hidden base (first edit of a Photo without a RAW).
+    pub kept_as_base: bool,
 }
 
-/// Replaces a Photo's display copy with `bytes`, same name, same folder (PRD D3). The old file goes
-/// to Recently Deleted ("Replaced originals"). Both steps are same-volume renames under the
-/// op-log: a crash at any point puts the original back and removes the new file.
-///
-/// The caller has already checked `bytes` is a good image. Refused offline, for a Photo without a
-/// display copy, and when the file isn't plain or is on another volume.
-pub fn replace_display(cat: &mut Catalog, photo_id: i64, bytes: &[u8]) -> Result<Replaced> {
-    let _one_at_a_time = exclusive();
-    ensure!(!bytes.is_empty(), "nothing to write");
-    let (location_id, file_id, rel, role): (i64, i64, String, String) = cat
+/// The hidden base of `display`, whether it exists or not.
+pub fn base_path(display: &Path) -> Option<PathBuf> {
+    Some(display.parent()?.join(BASE_DIR).join(display.file_name()?))
+}
+
+/// The hidden base of `path`, when it has one. Called on every image read, so one `stat`.
+pub fn existing_base(path: &Path) -> Option<PathBuf> {
+    // The base itself, and files outside a shoot folder structure, have none.
+    if path.parent()?.file_name()? == BASE_DIR {
+        return None;
+    }
+    base_path(path).filter(|b| b.is_file())
+}
+
+fn rel_base(rel: &str) -> String {
+    match rel.rsplit_once('/') {
+        Some((folder, name)) => format!("{folder}/{BASE_DIR}/{name}"),
+        None => format!("{BASE_DIR}/{rel}"),
+    }
+}
+
+/// The Photo's display copy, and what an overwrite or revert must check first.
+struct DisplayFile {
+    location: Location,
+    file_id: i64,
+    rel: String,
+    role: String,
+    has_raw: bool,
+    edited: bool,
+    meta: fs::Metadata,
+    photo: ManifestPhoto,
+}
+
+fn display_file(cat: &mut Catalog, photo_id: i64) -> Result<DisplayFile> {
+    let row: (i64, i64, String, String, bool, String, ManifestPhoto) = cat
         .conn()
         .query_row(
             "SELECT d.location_id, f.id,
                     CASE d.rel_path WHEN '' THEN f.name ELSE d.rel_path || '/' || f.name END,
-                    m.role
+                    m.role,
+                    EXISTS (SELECT 1 FROM photo_members x WHERE x.photo_id = p.id AND x.role = 'raw'),
+                    p.state, s.rel_path, p.stem_key, p.captured_at, COALESCE(md.rating, 0)
              FROM photos p
              JOIN files f ON f.id = p.display_file_id
              JOIN folders d ON d.id = f.folder_id
+             JOIN folders s ON s.id = p.shoot_folder_id
              JOIN photo_members m ON m.file_id = f.id AND m.photo_id = p.id
+             LEFT JOIN metadata md ON md.photo_id = p.id
              WHERE p.id = ?1",
             [photo_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    ManifestPhoto {
+                        shoot: r.get(6)?,
+                        stem: r.get(7)?,
+                        captured_at: r.get(8)?,
+                        rating: r.get(9)?,
+                    },
+                ))
+            },
         )
         .optional()?
         .ok_or_else(|| anyhow!("Photo {photo_id} has no display copy"))?;
+    let (location_id, file_id, rel, role, has_raw, state, photo) = row;
     ensure!(role == "display", "{rel} isn't a display copy");
     let location = online_location(cat, location_id)?;
-    let root = location.path.clone();
-    let root_dev = device(&root)?;
-
-    let display = safe_join(&root, &rel)?;
-    let meta = fs::symlink_metadata(&display)
+    let path = safe_join(&location.path, &rel)?;
+    let meta = fs::symlink_metadata(&path)
         .with_context(|| format!("{rel} is gone; nothing was changed"))?;
     ensure!(
         meta.is_file(),
         "{rel} is not a regular file; nothing was changed"
     );
     ensure!(
-        device(&display)? == root_dev,
+        device(&path)? == device(&location.path)?,
         "{rel} is on a different volume from {}; nothing was changed",
         location.name
     );
-    let trash_dir = plain_trash_dir(&root, root_dev)?;
+    Ok(DisplayFile {
+        location,
+        file_id,
+        rel,
+        role,
+        has_raw,
+        edited: state == "edited",
+        meta,
+        photo,
+    })
+}
+
+fn new_manifest(
+    op_id: &str,
+    location: &Location,
+    files: Vec<ManifestFile>,
+    photo: ManifestPhoto,
+    replaced_render: bool,
+) -> Manifest {
+    Manifest {
+        version: manifest::VERSION,
+        op_id: op_id.to_string(),
+        kind: "overwrite".to_string(),
+        reason: Reason::Replaced,
+        status: Status::Pending,
+        created_at: now_ms(),
+        committed_at: None,
+        location: ManifestLocation {
+            name: location.name.clone(),
+            volume_id: location.volume_id.clone(),
+            volume_rel_path: location.volume_rel_path.clone(),
+        },
+        files,
+        photos: vec![photo],
+        action_id: None,
+        xmp_copies: Vec::new(),
+        replaced_render,
+    }
+}
+
+/// Replaces a Photo's display copy with `bytes`, same name, same folder (PRD D3), with same-volume
+/// renames under the op-log: a crash at any point puts the original back and removes the new file.
+///
+/// What was there goes to Recently Deleted ("Replaced originals"), except the first edit of a
+/// Photo without a RAW: its original becomes the hidden base in `.originals/` that every render
+/// starts from (PRD §6.4), and stays until Revert or until the Photo is deleted.
+///
+/// The caller has already checked `bytes` is a good image. Refused offline, for a Photo without a
+/// display copy, and when the file isn't plain or is on another volume.
+pub fn replace_display(cat: &mut Catalog, photo_id: i64, bytes: &[u8]) -> Result<Replaced> {
+    let _one_at_a_time = exclusive();
+    ensure!(!bytes.is_empty(), "nothing to write");
+    let d = display_file(cat, photo_id)?;
+    let (location, file_id, rel) = (&d.location, d.file_id, d.rel.clone());
+    let location_id = location.id;
+    let root = location.path.clone();
+    let display = safe_join(&root, &rel)?;
+    let base_rel = rel_base(&rel);
+    let becomes_base = !d.has_raw && fs::symlink_metadata(safe_join(&root, &base_rel)?).is_err();
 
     let op_id = new_op_id();
     let (folder, name) = rel.rsplit_once('/').unwrap_or(("", rel.as_str()));
@@ -327,6 +439,10 @@ pub fn replace_display(cat: &mut Catalog, photo_id: i64, bytes: &[u8]) -> Result
         format!("{folder}/{temp_name}")
     };
     let temp_path = safe_join(&root, &temp)?;
+    let op_dir_rel = format!("{TRASH_DIR}/{op_id}");
+    if !becomes_base {
+        plain_trash_dir(&root, device(&root)?)?;
+    }
     // The replacement exists, complete and on disk, before anything is recorded or moved.
     {
         use std::io::Write;
@@ -342,74 +458,57 @@ pub fn replace_display(cat: &mut Catalog, photo_id: i64, bytes: &[u8]) -> Result
         }
     }
 
-    let op_dir_rel = format!("{TRASH_DIR}/{op_id}");
-    let op_dir = trash_dir.join(&op_id);
+    let out_to = if becomes_base {
+        base_rel.clone()
+    } else {
+        format!("{op_dir_rel}/{rel}")
+    };
     let payload = Payload {
         op_dir: op_dir_rel.clone(),
-        moves: vec![
-            (rel.clone(), format!("{op_dir_rel}/{rel}")),
-            (temp.clone(), rel.clone()),
-        ],
+        moves: vec![(rel.clone(), out_to), (temp.clone(), rel.clone())],
         created: Vec::new(),
         action: None,
         temp: Some(temp.clone()),
     };
-    let photo_row: ManifestPhoto = cat.conn().query_row(
-        "SELECT d.rel_path, p.stem_key, p.captured_at, COALESCE(md.rating, 0)
-         FROM photos p JOIN folders d ON d.id = p.shoot_folder_id
-         LEFT JOIN metadata md ON md.photo_id = p.id WHERE p.id = ?1",
-        [photo_id],
-        |r| {
-            Ok(ManifestPhoto {
-                shoot: r.get(0)?,
-                stem: r.get(1)?,
-                captured_at: r.get(2)?,
-                rating: r.get(3)?,
-            })
-        },
-    )?;
-    let mut manifest = Manifest {
-        version: manifest::VERSION,
-        op_id: op_id.clone(),
-        kind: "overwrite".to_string(),
-        reason: Reason::Replaced,
-        status: Status::Pending,
-        created_at: now_ms(),
-        committed_at: None,
-        location: ManifestLocation {
-            name: location.name.clone(),
-            volume_id: location.volume_id.clone(),
-            volume_rel_path: location.volume_rel_path.clone(),
-        },
-        files: vec![ManifestFile {
+    let op_dir = root.join(&op_dir_rel);
+    // A render replaced a render unless this is the camera's own file.
+    let replaced_render = d.edited || (!d.has_raw && !becomes_base);
+    let mut manifest = new_manifest(
+        &op_id,
+        location,
+        vec![ManifestFile {
             path: rel.clone(),
-            size: meta.len(),
-            mtime: mtime_ms(&meta),
-            role: role.clone(),
+            size: d.meta.len(),
+            mtime: mtime_ms(&d.meta),
+            role: d.role.clone(),
             photo: Some(0),
         }],
-        photos: vec![photo_row],
-        action_id: None,
-        xmp_copies: Vec::new(),
-    };
+        d.photo.clone(),
+        replaced_render,
+    );
 
     if let Err(e) = log_begin(cat, &op_id, "overwrite", location_id, &payload) {
         let _ = fs::remove_file(&temp_path);
         return Err(e);
     }
     let result = (|| -> Result<()> {
-        fs::create_dir(&op_dir).with_context(|| format!("cannot create {}", op_dir.display()))?;
-        manifest.write(&op_dir)?;
+        if !becomes_base {
+            fs::create_dir(&op_dir)
+                .with_context(|| format!("cannot create {}", op_dir.display()))?;
+            manifest.write(&op_dir)?;
+        }
         run_moves(&root, &payload.moves)
     })();
     if let Err(e) = result {
         return Err(abandon(cat, &root, &op_id, "overwrite", &payload, e));
     }
     log_finish(cat, &op_id, "committed")?;
-    manifest.status = Status::Committed;
-    manifest.committed_at = Some(now_ms());
-    if let Err(e) = manifest.write(&op_dir) {
-        log::warn!("Pairview: {op_id} committed but its manifest wasn't updated: {e:#}");
+    if !becomes_base {
+        manifest.status = Status::Committed;
+        manifest.committed_at = Some(now_ms());
+        if let Err(e) = manifest.write(&op_dir) {
+            log::warn!("Pairview: {op_id} committed but its manifest wasn't updated: {e:#}");
+        }
     }
 
     // Same file row (same name), new content: L1 reads it again because the mtime changed.
@@ -433,8 +532,213 @@ pub fn replace_display(cat: &mut Catalog, photo_id: i64, bytes: &[u8]) -> Result
     Ok(Replaced {
         op_id,
         location_id,
-        replaced_bytes: meta.len(),
+        replaced_bytes: d.meta.len(),
         new_bytes: bytes.len() as u64,
+        kept_as_base: becomes_base,
+    })
+}
+
+/// A finished Revert.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Reverted {
+    pub op_id: String,
+    pub location_id: i64,
+    pub restored_bytes: u64,
+}
+
+/// Where a Revert gets the original from.
+enum Original {
+    /// A Photo with a RAW: the operation in Recently Deleted that holds the camera's file.
+    InRecentlyDeleted { op_id: String, rel: String },
+    /// A Photo without a RAW: its hidden base.
+    Base { rel: String },
+}
+
+fn find_original(root: &Path, d: &DisplayFile) -> Result<Option<Original>> {
+    if !d.has_raw {
+        let rel = rel_base(&d.rel);
+        return Ok(fs::symlink_metadata(safe_join(root, &rel)?)
+            .is_ok()
+            .then_some(Original::Base { rel }));
+    }
+    let Ok(entries) = fs::read_dir(root.join(TRASH_DIR)) else {
+        return Ok(None);
+    };
+    let mut best: Option<(i64, String)> = None;
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        let Ok(m) = Manifest::read(&dir) else {
+            continue;
+        };
+        let holds_it = m.reason == Reason::Replaced
+            && m.status == Status::Committed
+            && !m.replaced_render
+            && m.files.iter().any(|f| f.path == d.rel)
+            && safe_join(&dir, &d.rel).is_ok_and(|p| fs::symlink_metadata(p).is_ok());
+        if holds_it && best.as_ref().is_none_or(|(at, _)| m.created_at > *at) {
+            best = Some((m.created_at, m.op_id));
+        }
+    }
+    Ok(best.map(|(_, op_id)| Original::InRecentlyDeleted {
+        rel: format!("{TRASH_DIR}/{op_id}/{}", d.rel),
+        op_id,
+    }))
+}
+
+/// Whether Revert can run for this Photo: reads only. Offline counts as no.
+pub fn can_revert(cat: &mut Catalog, photo_id: i64) -> Result<bool> {
+    let _one_at_a_time = exclusive();
+    let Ok(d) = display_file(cat, photo_id) else {
+        return Ok(false);
+    };
+    if d.has_raw && !d.edited {
+        return Ok(false);
+    }
+    Ok(find_original(&d.location.path.clone(), &d)?.is_some())
+}
+
+/// Revert (PRD §6.4): the original goes back under the display copy's name; the render and the
+/// recipe go to Recently Deleted, so even this can be undone by hand. Renames under the op-log.
+/// Refused when the original is gone: after the 30-day purge there is nothing to go back to.
+pub fn revert_display(cat: &mut Catalog, photo_id: i64) -> Result<Reverted> {
+    let _one_at_a_time = exclusive();
+    let d = display_file(cat, photo_id)?;
+    ensure!(!d.has_raw || d.edited, "this Photo has no edit to revert");
+    let root = d.location.path.clone();
+    let location_id = d.location.id;
+    let original = find_original(&root, &d)?.ok_or_else(|| {
+        anyhow!(
+            "the original of {} is no longer available; nothing was changed",
+            d.rel
+        )
+    })?;
+    let original_rel = match &original {
+        Original::InRecentlyDeleted { rel, .. } | Original::Base { rel } => rel.clone(),
+    };
+    let restored_bytes = fs::symlink_metadata(safe_join(&root, &original_rel)?)?.len();
+
+    // The recipe sits next to the RAW, or next to the display copy without one.
+    let recipe_owner: String = if d.has_raw {
+        cat.conn().query_row(
+            "SELECT CASE x.rel_path WHEN '' THEN f.name ELSE x.rel_path || '/' || f.name END
+             FROM photo_members m JOIN files f ON f.id = m.file_id JOIN folders x ON x.id = f.folder_id
+             WHERE m.photo_id = ?1 AND m.role = 'raw' LIMIT 1",
+            [photo_id],
+            |r| r.get(0),
+        )?
+    } else {
+        d.rel.clone()
+    };
+    let recipe_rel = format!("{recipe_owner}.rrdata");
+    let recipe_meta = fs::symlink_metadata(safe_join(&root, &recipe_rel)?)
+        .ok()
+        .filter(|m| m.is_file());
+
+    plain_trash_dir(&root, device(&root)?)?;
+    let op_id = new_op_id();
+    let op_dir_rel = format!("{TRASH_DIR}/{op_id}");
+    let op_dir = root.join(&op_dir_rel);
+    let mut moves = vec![
+        (d.rel.clone(), format!("{op_dir_rel}/{}", d.rel)),
+        (original_rel.clone(), d.rel.clone()),
+    ];
+    let mut files = vec![ManifestFile {
+        path: d.rel.clone(),
+        size: d.meta.len(),
+        mtime: mtime_ms(&d.meta),
+        role: d.role.clone(),
+        photo: Some(0),
+    }];
+    if let Some(meta) = &recipe_meta {
+        moves.push((recipe_rel.clone(), format!("{op_dir_rel}/{recipe_rel}")));
+        files.push(ManifestFile {
+            path: recipe_rel.clone(),
+            size: meta.len(),
+            mtime: mtime_ms(meta),
+            role: "sidecar".into(),
+            photo: Some(0),
+        });
+    }
+    let payload = Payload {
+        op_dir: op_dir_rel,
+        moves,
+        created: Vec::new(),
+        action: None,
+        temp: None,
+    };
+    let mut manifest = new_manifest(&op_id, &d.location, files, d.photo.clone(), true);
+    log_begin(cat, &op_id, "overwrite", location_id, &payload)?;
+    let result = (|| -> Result<()> {
+        fs::create_dir(&op_dir).with_context(|| format!("cannot create {}", op_dir.display()))?;
+        manifest.write(&op_dir)?;
+        run_moves(&root, &payload.moves)
+    })();
+    if let Err(e) = result {
+        return Err(abandon(cat, &root, &op_id, "overwrite", &payload, e));
+    }
+    log_finish(cat, &op_id, "committed")?;
+    manifest.status = Status::Committed;
+    manifest.committed_at = Some(now_ms());
+    if let Err(e) = manifest.write(&op_dir) {
+        log::warn!("Pairview: {op_id} committed but its manifest wasn't updated: {e:#}");
+    }
+
+    // Tidy where the original came from.
+    match &original {
+        Original::InRecentlyDeleted { op_id: old, .. } => {
+            let old_dir = root.join(TRASH_DIR).join(old);
+            let _ = fs::remove_file(old_dir.join(manifest::FILE_NAME));
+            prune_dirs(&old_dir, std::slice::from_ref(&d.rel));
+            let _ = fs::remove_dir(&old_dir);
+        }
+        Original::Base { rel } => {
+            if let Some(parent) = safe_join(&root, rel)?.parent() {
+                let _ = fs::remove_dir(parent);
+            }
+        }
+    }
+
+    // The catalog follows; the watcher's next scan would too.
+    let forget = (|| -> Result<()> {
+        let display = safe_join(&root, &d.rel)?;
+        let now = fs::symlink_metadata(&display)?;
+        let tx = cat.conn_mut().transaction()?;
+        tx.execute(
+            "UPDATE files SET size = ?2, mtime = ?3 WHERE id = ?1",
+            (d.file_id, now.len() as i64, mtime_ms(&now)),
+        )?;
+        if recipe_meta.is_some() {
+            let (folder, name) = recipe_rel
+                .rsplit_once('/')
+                .unwrap_or(("", recipe_rel.as_str()));
+            tx.execute(
+                "DELETE FROM files WHERE name = ?1 AND folder_id =
+                     (SELECT id FROM folders WHERE location_id = ?2 AND rel_path = ?3)",
+                (name, location_id, folder),
+            )?;
+        }
+        let shoot: i64 = tx.query_row(
+            "SELECT shoot_folder_id FROM photos WHERE id = ?1",
+            [photo_id],
+            |r| r.get(0),
+        )?;
+        assets::rebuild_shoot(&tx, shoot)?;
+        tx.execute(
+            "UPDATE photos SET state = 'raw_display', updated_at = ?2
+             WHERE id = ?1 AND state = 'edited'",
+            (photo_id, now_ms()),
+        )?;
+        tx.commit()?;
+        Ok(())
+    })();
+    if let Err(e) = forget {
+        log::warn!("Pairview: {op_id}: catalog not updated: {e:#}");
+    }
+    Ok(Reverted {
+        op_id,
+        location_id,
+        restored_bytes,
     })
 }
 
@@ -952,7 +1256,7 @@ fn recover_where(cat: &mut Catalog, only_location: Option<i64>) -> Result<Recove
 /// Undoes whatever part of an operation happened. Safe to run more than once.
 fn rollback(root: &Path, kind: &str, payload: &Payload) -> Result<()> {
     let mut problems = Vec::new();
-    for (from, to) in payload.moves.iter().rev() {
+    for (i, (from, to)) in payload.moves.iter().enumerate().rev() {
         let (src, dst) = (safe_join(root, from)?, safe_join(root, to)?);
         let (at_src, at_dst) = (
             fs::symlink_metadata(&src).is_ok(),
@@ -965,8 +1269,8 @@ fn rollback(root: &Path, kind: &str, payload: &Payload) -> Result<()> {
                     problems.push(format!("{to} → {from}: {e}"));
                 }
             }
-            // The replacement hasn't moved yet: the original is still at `to`.
-            (true, true) if payload.temp.as_deref() == Some(from.as_str()) => {}
+            // A swap: an earlier move empties `to`, and it hasn't run yet, so neither has this.
+            (true, true) if payload.moves[..i].iter().any(|(f, _)| f == to) => {}
             (true, true) => problems.push(format!("both {from} and {to} exist")),
             (false, false) => problems.push(format!("{from} is missing")),
         }
@@ -986,6 +1290,15 @@ fn rollback(root: &Path, kind: &str, payload: &Payload) -> Result<()> {
         match fs::remove_file(safe_join(root, temp)?) {
             Err(e) if e.kind() != io::ErrorKind::NotFound => problems.push(format!("{temp}: {e}")),
             _ => {}
+        }
+    }
+    if problems.is_empty() {
+        for (_, to) in &payload.moves {
+            let dst = safe_join(root, to)?;
+            // An empty hidden-base folder this operation made.
+            if let Some(parent) = dst.parent().filter(|p| p.ends_with(BASE_DIR)) {
+                let _ = fs::remove_dir(parent);
+            }
         }
     }
     if kind != "restore" && problems.is_empty() {

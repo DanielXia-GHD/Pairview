@@ -1135,3 +1135,40 @@ pub async fn pv_edit_done(
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// Whether the editor should offer Revert for this Photo.
+#[tauri::command]
+pub fn pv_edit_can_revert(state: State<PvState>, path: String) -> Result<bool, String> {
+    let target = PathBuf::from(lifecycle::upstream::base_path(&path));
+    let mut cat = state.writer().map_err(err)?;
+    let Some(ids) =
+        lifecycle::plan::photo_ids_for_paths(&cat, std::slice::from_ref(&target)).map_err(err)?
+    else {
+        return Ok(false);
+    };
+    lifecycle::can_revert(&mut cat, ids[0]).map_err(err)
+}
+
+/// Revert in the editor: the original comes back; the render and recipe go to Recently Deleted.
+#[tauri::command]
+pub fn pv_edit_revert(
+    app: AppHandle,
+    state: State<PvState>,
+    path: String,
+) -> Result<lifecycle::Reverted, String> {
+    let target = PathBuf::from(lifecycle::upstream::base_path(&path));
+    let mut cat = state.writer().map_err(err)?;
+    let ids = lifecycle::plan::photo_ids_for_paths(&cat, std::slice::from_ref(&target))
+        .map_err(err)?
+        .ok_or_else(|| "this isn't a Photo in a library location".to_string())?;
+    let reverted = crate::pv::edit::revert(&mut cat, ids[0]).map_err(err)?;
+    let _ = app.emit(
+        FOLDER_CHANGED_EVENT,
+        watch::FolderChanged {
+            location_id: reverted.location_id,
+            folders: Vec::new(),
+            shoots: Vec::new(),
+        },
+    );
+    Ok(reverted)
+}

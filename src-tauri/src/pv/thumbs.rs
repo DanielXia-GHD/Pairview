@@ -55,7 +55,8 @@ pub fn quick_thumbnail(path: &Path, target_res: u32) -> Option<DynamicImage> {
     if crate::formats::is_raw_file(path) {
         crate::file_management::try_load_embedded_raw_preview(path, target_res)
     } else if crate::pv::heif::is_heif_file(path) {
-        let mmap = crate::file_management::read_file_mapped(path).ok()?;
+        // What the file shows now (a rendered edit), not its hidden base.
+        let mmap = crate::file_management::read_file_mapped_exact(path).ok()?;
         crate::pv::heif::heif_thumbnail(&mmap, target_res).ok()
     } else {
         None
