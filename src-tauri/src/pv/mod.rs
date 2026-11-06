@@ -7,6 +7,7 @@ pub mod commands;
 pub mod edit;
 pub mod exif_read;
 pub mod heif;
+pub mod history;
 pub mod intent;
 pub mod lifecycle;
 pub mod locations;

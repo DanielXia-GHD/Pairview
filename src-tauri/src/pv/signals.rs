@@ -40,7 +40,8 @@ const GREEN: f32 = 1.15;
 const MAGENTA: f32 = 0.87;
 const UNTOUCHED_DAYS: i64 = 30;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ImageStats {
     pub clipped: f32,
     pub shadows: f32,
@@ -350,7 +351,7 @@ pub fn ensure_stats(cat: &mut Catalog, photo_ids: &[i64]) -> Result<usize> {
     Ok(computed.len())
 }
 
-fn stats_of(path: &Path) -> Option<ImageStats> {
+pub(crate) fn stats_of(path: &Path) -> Option<ImageStats> {
     let image =
         crate::pv::thumbs::quick_thumbnail(path, STATS_PX).or_else(|| image::open(path).ok())?;
     Some(image_stats(&image))

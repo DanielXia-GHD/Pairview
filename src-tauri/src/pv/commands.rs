@@ -1119,9 +1119,17 @@ pub async fn pv_edit_done(
             }
             photo
         };
+        let recipe = adjustments.clone();
         let rendered = crate::export_processing::render_for_pairview(&path, adjustments, &app)?;
         let mut cat = state.writer().map_err(err)?;
         let replaced = crate::pv::edit::finish(&mut cat, photo, &rendered).map_err(err)?;
+        // The edit is done whatever happens here: losing a training example costs little.
+        if let Some(recipe) = recipe {
+            let history = crate::pv::history::file_next_to(&state.catalog_path);
+            if let Err(e) = crate::pv::history::record_edit(&history, &cat, photo, &recipe) {
+                log::warn!("Pairview: edit history not recorded: {e:#}");
+            }
+        }
         let _ = app.emit(
             FOLDER_CHANGED_EVENT,
             watch::FolderChanged {
@@ -1162,6 +1170,10 @@ pub fn pv_edit_revert(
         .map_err(err)?
         .ok_or_else(|| "this isn't a Photo in a library location".to_string())?;
     let reverted = crate::pv::edit::revert(&mut cat, ids[0]).map_err(err)?;
+    let history = crate::pv::history::file_next_to(&state.catalog_path);
+    if let Err(e) = crate::pv::history::record_revert(&history, &cat, ids[0]) {
+        log::warn!("Pairview: edit history not recorded: {e:#}");
+    }
     let _ = app.emit(
         FOLDER_CHANGED_EVENT,
         watch::FolderChanged {
