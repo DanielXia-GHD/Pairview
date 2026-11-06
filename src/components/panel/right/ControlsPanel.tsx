@@ -29,6 +29,7 @@ import { useSettingsStore } from '../../../store/useSettingsStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { buildAutoAdjustModeOptions, useEditorActions } from '../../../hooks/useEditorActions';
 import { useWaveformControls } from '../../../hooks/useWaveformControls';
+import PvLooksSection from '../../../pv/looks/PvLooksSection'; // PV
 
 function AdjustmentSectionContent(props: {
   sectionName: string;
@@ -291,6 +292,15 @@ export default function Controls() {
       </AnimatePresence>
 
       <div className="grow overflow-y-scroll p-3 flex flex-col gap-2">
+        {/* PV: Looks panel (My Sony, film stocks, camera styles) */}
+        {selectedImage && (
+          <PvLooksSection
+            setAdjustments={setAdjustments}
+            onSelect={handleLutSelect}
+            onHover={setLutPreviewOverride}
+            onDragStateChange={onDragStateChange}
+          />
+        )}
         {selectedImage ? (
           visibleSections.map((sectionName: string) => {
             const title = t(`editor.adjustments.sections.${sectionName}`);

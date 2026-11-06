@@ -352,6 +352,21 @@
       "revertMessage": "The original {{display}} comes back. The edited {{display}} and your edits go to Recently Deleted for 30 days.",
       "revertConfirm": "Revert",
       "reverted": "The original {{display}} is back."
+    },
+    "looks": {
+      "title": "Looks",
+      "intensity": "Intensity",
+      "none": "None",
+      "noneHintRaw": "RapidRAW's neutral render, with no camera look",
+      "noneHintDisplay": "This photo as it is, with no look",
+      "favourite": "Add to favourites",
+      "unfavourite": "Remove from favourites",
+      "groups": {
+        "favourites": "Favourites",
+        "myCamera": "My Camera",
+        "film": "Film",
+        "cameraStyle": "Camera styles"
+      }
     }
   }
 }

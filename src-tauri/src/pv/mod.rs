@@ -14,6 +14,7 @@ pub mod locations;
 pub mod look;
 #[cfg(all(test, target_os = "macos"))]
 mod look_job;
+pub mod looks;
 pub mod metadata;
 mod nas_check;
 pub mod queries;

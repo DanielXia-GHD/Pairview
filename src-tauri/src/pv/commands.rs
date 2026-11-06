@@ -1214,3 +1214,11 @@ pub fn pv_base_look(app: AppHandle) -> Result<Option<BaseLook>, String> {
         size: lut.size,
     }))
 }
+
+/// The Looks panel's catalogue.
+#[tauri::command]
+pub fn pv_looks(app: AppHandle) -> Result<Vec<crate::pv::looks::Look>, String> {
+    Ok(crate::pv::looks::catalogue(
+        crate::lut_processing::list_luts(app)?,
+    ))
+}

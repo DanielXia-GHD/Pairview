@@ -2997,6 +2997,7 @@ pub fn run() {
             pv::commands::pv_edit_can_revert,
             pv::commands::pv_edit_revert,
             pv::commands::pv_base_look,
+            pv::commands::pv_looks,
             pv::commands::pv_list_images_for_path,
             pv::commands::pv_set_metadata,
         ])
