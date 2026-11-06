@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft v0.3.1 — open questions resolved, no feature code yet |
+| Status | Draft v0.4 — M0–M2 built, M3 in progress |
 | Owner | sunnydanniel@gmail.com |
 | Date | 2026-11-01 |
 | Platforms | **macOS (Apple Silicon, M2) first** → `.dmg`; Windows 10/11 x64 (Nvidia, HEVC extension installed) → `.exe`, parity where cheap |
@@ -11,6 +11,7 @@
 | Camera | Sony **A7C II** (ILCE-7CM2, fw 2.01), shooting primarily **ARW + HIF**, sometimes ARW + JPG |
 
 ### Changelog
+- **v0.4** — Looks expanded (§6.4): **Spektrafilm** film stocks as LUTs in M3, a new Looks panel, optional per-stock grain and halation, Sony Creative Looks fitted from the owner's frames, Fujifilm-inspired and Leica-inspired styles. Nikon and Canon dropped from v1. The full spectral simulation moves to a new milestone, **M7 — Film lab**. Decisions D15–D18.
 - **v0.3.1** — Repo renamed to `DanielXia-GHD/Pairview`. FTP folder naming confirmed (same `NNNYMMDD` as the card). Opt-in **auto-tidy** of new FTP shoots. Fixed the wrong year in the `10561031` example (it is 2026-10-31).
 - **v0.3** — Named **Pairview**. Fork connected as `origin`. Library Locations manager (§6.1.1). Camera-FTP arrivals (§6.9.1). Keep-RAW is now **AI triage first, human confirmation after**, with a hard rule that AI never drops a RAW on its own (§6.5). Slim review can be triggered manually; retention fixed at 30 days. Existing `arw/`/`hif/` subfolders stay, future shoots are flat.
 - **v0.2** — Owner's folder conventions (§5.1). Real sample-file findings (§5.4). Keep-RAW decision workflow (§6.5), now driving delete and space saver. Edited output stays HEIF. Camera-original goes to Recently Deleted. Looks library expanded (Fujifilm/Nikon/etc.). Folder-scoped lazy indexing for the NAS. Lightroom/Capture One library ideas (§6.12). Mac-first milestones with a Windows tabling rule (§10). Name ideas (§13).
@@ -68,6 +69,10 @@ The owner shoots Sony **ARW + HIF** (sometimes ARW + JPG). Every tool treats the
 | D12 | Retention | **30 days** for everything in Recently Deleted; slim review can also be **triggered manually** at any time | §6.5 Stage 4, §6.6 |
 | D13 | Folder layout | Existing `arw/`/`hif/` subfolders **stay as they are**; **future shoots are flat** (one folder per day) | §5.1, §6.9 |
 | D14 | Name | **Pairview** | Branding (app name, bundle id `com.danielxia.pairview`, icon) changes in M0 |
+| D15 | Film looks | **Spektrafilm as baked LUTs in M3; native simulation later** (M7) | All 20 stocks, one default paper each. No Python in the app. LUTs carry colour and tone only |
+| D16 | Camera styles | **Fujifilm-inspired and Leica-inspired in M3, alongside film.** Nikon and Canon are out of v1 | Fitted from public RAW + JPG samples, downloaded without a per-source approval step, used locally only |
+| D17 | Film effects | **Colour by default; grain and halation are an optional toggle** with per-stock values | One click never adds grain unasked |
+| D18 | Looks UI | **A dedicated Looks panel** in the editor; upstream's LUT control stays for the owner's own LUT files | Grouped My Camera · Film · Camera styles, with favourites and intensity |
 
 ---
 
@@ -195,13 +200,28 @@ Priority: **P0** = MVP, **P1** = v1.0, **P2** = later.
 - **P0** **Photos without RAW**: the first edit stores the original as a hidden base `.originals/…`, and every render starts from that base (confirmed, Q12.2).
 - **P1** Copy/paste recipe, batch apply, and export resized copies for sharing (separate from overwrite).
 
-**Looks (camera styles) — P1, M3**
-1. **"My Sony" (from your own files):** fit a per-camera base look (tone curve + 3D LUT) by comparing the owner's own ARW→HIF pairs. There are thousands of training pairs on the NAS, so the fitted look is exactly what the A7C II produces. All edits start from "looks like my camera". This is also the default base for style learning (§6.8).
-2. **Sony Creative Looks** (ST, PT, NT, VV, VV2, FL, IN, SH, BW, SE): fitted the same way if the owner shoots a few test frames per Creative Look, or approximated.
-3. **Classic looks library** (for personal use): **Fujifilm**-inspired (Provia, Velvia, Astia, Classic Chrome, Classic Neg, Nostalgic Neg, Eterna, Reala Ace, Acros), **Nikon** Picture Controls (Standard, Vivid, Flexible Color looks), **Canon** Picture Styles, **Leica**-style looks, plus RapidRAW's existing **Spektrafilm** film stocks.
-   - Implementation: each look is a LUT + tone curve applied on top of the neutral camera-matched base, in RapidRAW's existing LUT pipeline, with intensity 0–100%.
-   - Source: fit each look from public sample pairs (that brand's RAW + in-camera JPG of the same frame), then transfer to the Sony base. Hand-tune against reference images. Expect "very close", not bit-exact.
-4. A look picker with live thumbnails (as in Pixea/Fuji X RAW Studio), and favorite looks.
+**Looks — P1, M3**
+
+A Photo has one look at a time, because RapidRAW has one LUT slot: picking a film or a style **replaces** My Sony, it doesn't stack on it. Every look has an intensity from 0 to 100% and stays an ordinary, removable part of the recipe. *None* gives RapidRAW's neutral render.
+
+1. **My Camera**
+   - **"My Sony"** (done, M3-06): fitted from the owner's ARW→HIF pairs. The default for a RAW Photo with no recipe. Held-out median ΔE2000 1.17 ([results](M3-look.md)).
+   - **Sony Creative Looks** (ST, PT, NT, VV, VV2, FL, IN, SH, BW, SE): fitted the same way from frames the **owner shoots** on the A7C II: about 3–5 RAW + HIF scenes per look, 30–50 frames total.
+2. **Film — [Spektrafilm](https://github.com/andreavolpato/spektrafilm)** (D15): spectral simulations built from manufacturer data, baked offline into LUTs that run instantly on the GPU. All 20 stocks, each with one sensible default paper:
+   - Colour negative: Fujifilm C200, Pro 400H, Xtra 400; Kodak Ektar 100, Gold 200, Portra 160, 400, 800 (+1 and +2 push), Ultramax 400, Verita 200D.
+   - Slide: Fujifilm Provia 100F, Velvia 100; Kodak Ektachrome 100, Kodachrome 64.
+   - Cinema: Kodak Vision3 50D, 200T, 250D, 500T.
+   - RapidRAW already bundles 6 of these; Pairview adds the rest under the same licence terms.
+   - A LUT can't hold real grain or local effects. **Add film grain + halation** (D17) is an optional toggle that sets RapidRAW's own sliders to values chosen per stock.
+3. **Camera styles** (D16), named "-inspired":
+   - **Fujifilm-inspired:** Provia, Velvia, Astia, Classic Chrome, Classic Neg, Nostalgic Neg, Eterna, Reala Ace, Acros.
+   - **Leica-inspired:** which looks depends on what public samples support reliably.
+   - Fitted with the My Sony method, from that brand's RAW + in-camera JPG of the same frame, then applied to the Sony's neutral render. Expect "very close to the character", not bit-exact. Hand-tuned where needed.
+   - A look needing more than the bar below is labelled **approximate**, or left out.
+   - Public samples are used locally only. Neither the photos nor the fitted brand LUTs go in the repo.
+4. **Looks panel** (D18): a section in the editor with live thumbnails, grouped as above, favourites and an intensity slider.
+
+**Quality bar for fitted looks:** median ΔE2000 ≤ 3 on photos the fit never saw, with at least 5 held-out frames. Spektrafilm LUTs aren't scored against a camera; they're checked against the reference simulation.
 
 ### 6.5 Keep-RAW decision workflow (answers "casual vs. valuable")
 
@@ -388,10 +408,11 @@ Tauri 2 shell (fork of RapidRAW — React + TS + zustand / Rust + wgpu + ONNX Ru
 | **M0 — Mac spikes** (in progress, see [M0-findings](M0-findings.md)) | Fork builds and runs on M2 (`npm start`). **HIF decode in RapidRAW's loader via ImageIO**. **10-bit HEIF encode** via ImageIO (verify 10-bit, EXIF copy). Embedded-preview extraction speed for ARW + HIF on the NAS. Pairing over `arw/`+`hif/`. XAVC HS playback check. Unsigned `.dmg` from CI. | The owner's 2026-10-24 shoot opens, pairs, and thumbnails in < 5 s from the NAS; a HIF round-trips decode → edit → 10-bit HEIF write |
 | **M1 — Library + Viewer** | **Library Locations** manager (add/relocate/exclude/status), new-file detection, L0–L2 indexing, folder tree + shoots, date view, Photo grid + badges, viewer, full screen, ←/→, zoom, slideshow, ratings → XMP, albums Photo-aware | The owner replaces Pixea for daily browsing |
 | **M2 — Lifecycle + Keep-RAW** | Delete dialog + defaults, Recently Deleted, orphans, op-log/undo, shoot intent chip, heuristic RAW-value signals (clipping, ISO, WB, rating), Ready-to-slim + **manual Review for slimming**, offline handling | RAW and HIF are never out of sync again; a shoot is slimmed in < 2 min |
-| **M3 — Edit loop + Looks** | `E` on RAW, overwrite HIF/JPG + original to Recently Deleted, base rule for no-RAW, revert, generic Auto, **"My Sony" look fitting**, looks library v1, **edit-history capture** | Edit a shot end-to-end in < 30 s; default renders match the camera HIF closely |
+| **M3 — Edit loop + Looks** | `E` on RAW, overwrite HIF/JPG + original to Recently Deleted, base rule for no-RAW, revert, generic Auto, **"My Sony" look fitting**, **Looks panel**, **20 Spektrafilm film stocks** (grain + halation toggle), **Sony Creative Looks**, **Fujifilm- and Leica-inspired styles**, **edit-history capture** | Edit a shot end-to-end in < 30 s; default renders match the camera HIF closely |
 | **M4 — AI triage + Import** | Full **AI triage** on arrival (intent guess, bursts, suggested rejects, AI ★, RAW value), human-pass UI (accept or override), FTP New arrivals, SD import, compare/survey, focus mask | An FTP-uploaded shoot is triaged before the owner opens it; the human pass takes minutes, not an hour |
 | **M5 — Find + Collections** | Smart collections, quick collection, filter bar, metadata + semantic search, map, video, pair-safe batch rename | |
 | **M6 — Style** | Style training, Auto = my style, named styles, "Why?", batch auto, rebake-before-drop, learned Keep-RAW weights | Auto edits accepted unchanged ≥ 50% |
+| **M7 — Film lab** | Native spectral simulation from Spektrafilm via its Rust port, after a spike: per-photo grain, halation, couplers and paper choice beyond what LUTs can do | Full-resolution render fast enough for Done; matches the reference simulation |
 | **W — Windows** | `.exe` build + parity pass after M3, then per milestone; tabled items stay tabled | Core library/viewer/lifecycle/edit loop work on Windows |
 
 ### 10.1 Windows tabling rule
@@ -415,7 +436,10 @@ Any feature where the Windows path is meaningfully harder or more expensive than
 | ImageIO 10-bit HEIF encode drops to 8-bit or loses metadata | Med | Med | M0 spike; fall back to libheif + x265 on Mac (GPL is fine for personal use) |
 | SMB latency makes large folders feel slow | Med | Med | Lazy L2, local cache, prefetch, never read full files while browsing |
 | Keep-RAW recommendation drops a RAW the owner later wants | Med | High | Review screen required; 30-day Recently Deleted; locks; conservative defaults; Important-shoot override |
-| Fitted "looks" don't match brand rendering closely | Med | Low | Labeled "-inspired", intensity slider, owner-tunable |
+| Fitted "looks" don't match brand rendering closely | Med | Low | Labeled "-inspired", ΔE bar, "approximate" label or left out, intensity slider, owner-tunable |
+| Too few labelled public samples for a brand look (likely for Leica and for newer Fujifilm simulations) | High | Low | Look is labelled approximate or dropped; doesn't hold up M3 |
+| Sample terms or look-alike names | Low | Low | Personal use (D2); terms checked per source, sources logged; samples and brand LUTs stay out of the repo |
+| Spektrafilm's model or Rust port changes fast, or the port goes quiet | Med | Low | Baked LUTs keep working unchanged; M7 starts with a spike |
 | Wrong pair → wrong RAW deleted | Low | High | Shoot scope + timestamp guard + mismatch badge + Recently Deleted |
 | RAW develop ≠ camera HIF | High (confirmed) | Med | "My Sony" look as default base (M3) |
 
@@ -453,4 +477,5 @@ Any feature where the Windows path is meaningfully harder or more expensive than
 - AI culling patterns: bursts, best-of, focus, eyes ([overview, vendor-written](https://imagen-ai.com/post/best-ai-photo-culling-software/)).
 - libheif: LGPL, libde265/FFmpeg decoders, Rust bindings ([libheif](https://github.com/strukturag/libheif)).
 - RapidRAW: AGPL-3.0, rawler, wgpu, ONNX (CoreML/DirectML), albums, culling, CLIP tagging; no HEIF ([RapidRAW](https://github.com/CyberTimon/RapidRAW)). rawler includes `a7cm2.toml` ([RapidRAW-DngLab](https://github.com/CyberTimon/RapidRAW-DngLab)).
+- Spektrafilm: Python reference, GPL-3.0; profiles and LUTs CC BY-SA 4.0 with a "no resale" preamble; `spektrafilm-lut` bakes `.cube` files; "full resolution export is very slow" ([spektrafilm](https://github.com/andreavolpato/spektrafilm)). Rust port with wgpu preview and a CPU export it reports as bit-identical to the reference, GPL-3.0 ([spektrafilm-rs](https://github.com/turbasvin/spektrafilm-rs)). Checked 2026-11-05.
 - Pixea UX: same-window viewer, keyboard-first, theatre mode/slideshow ([Pixea](https://www.imagetasks.com/pixea/)).

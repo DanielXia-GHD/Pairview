@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | v1, 2026-11-01. Covers M0 wrap-up and M1 in detail, M2–M3 at task level, M4–M6 as outlines |
-| Inputs | [PRD v0.3.1](PRD.md), [M0 findings](M0-findings.md) |
+| Status | v1.1, 2026-11-05. Covers M0 wrap-up and M1 in detail, M2–M3 at task level, M4–M7 as outlines |
+| Inputs | [PRD v0.4](PRD.md), [M0 findings](M0-findings.md) |
 | Rule | **The PRD says *what*; this plan says *how* and *in what order*.** Update this file when a task finishes or a decision changes. |
 
 ---
@@ -156,15 +156,28 @@ These refine PRD §8 and are binding unless changed here.
 | `[x] M3-04` | Thumbnail/viewer cache invalidation after overwrite. Done: grid thumbnails were already keyed on RAW mtime + recipe; the viewer URL gets a per-session display version; RAW-value statistics follow the file's mtime | S | M3-02 |
 | `[x] M3-05` | **Edit-history capture** for style learning (features + final sliders + look), local store. Done: `pv/history.rs` appends one JSON line per Done to `pairview-edit-history.jsonl` next to the catalog (not in it: the catalog is a rebuildable cache, this isn't). Tone statistics of the pre-edit image, EXIF, sliders without blobs, look; Revert appends a marker; the trainer (M6) takes the latest line per Photo. CLIP embeddings come with M4 | S | M3-02 |
 | `[x] M3-06` | **"My Sony" look fitting**: sample ARW→HIF pairs, fit tone curve + 3D LUT, save as a RapidRAW LUT preset; quality metric (ΔE vs camera HIF). Done: `pv/look.rs`, `pv/look_job.rs`, results in `docs/M3-look.md`. On 12 held-out pairs the median ΔE2000 falls from 13.13 to 1.17; installed as `My Sony.cube`. Nothing applies it by default yet (M3-07/08) | O | M3-01 |
-| `[ ] M3-07` | Looks picker (live thumbnails, intensity), classic looks library v1 (LUT files). Picker: upstream's LUT control already has live previews and intensity, and lists My Sony. Base look done: RAW Photos with no recipe start from My Sony; Reset and "before" keep it. **Classic looks library not built**: it needs public sample pairs per brand and hand tuning | S | M3-06 |
+| `[ ] M3-07` | **Looks panel** (PRD D18): editor section with live thumbnails (upstream's LUT preview command), groups My Camera · Film · Camera styles, favourites, intensity, None. One look at a time: a choice replaces My Sony. Upstream's LUT control stays for own LUT files. Base look done: RAW Photos with no recipe start from My Sony; Reset and "before" keep it | S | M3-06 |
 | `[x] M3-08` | Generic Auto button wired to "My Sony" base + RapidRAW auto adjustments. Done: Auto keeps the look and judges exposure on its result, because RapidRAW's analysis of the neutral image brightened twice (median ΔE 8–15 on most held-out pairs, now 0.7–3.3); `docs/M3-look.md`. Owner visual check pending | S | M3-06 |
-| `[ ] M3-09` | Exit check: edit 20 photos end-to-end; default render vs camera HIF ΔE report | O | all M3 |
+| `[ ] M3-10` | **Spektrafilm film stocks** (PRD D15): bake all 20 with `spektrafilm-lut` (a dev tool: Python stays out of the app), for RapidRAW's scene-referred LUT path (V-Log in, sRGB out; confirm against upstream's 6 bundled stocks first). Default paper per stock, recorded in a table. Own folder `resources/pv_film_luts/`, so upstream merges don't collide, with `SPEKTRAFILM_LICENSE.txt` unmodified and a `CHANGELOG.txt`. Check: each loads and previews; samples match the reference simulation; Auto with a scene-referred look is measured, since the M3-08 fix only covers display-referred ones. Credit in Settings → Thanks | S | M3-07 |
+| `[ ] M3-11` | **Add film grain + halation** toggle (PRD D17): per-stock values for RapidRAW's own grain, halation and glow sliders, off by default, stored as ordinary recipe values | S | M3-10 |
+| `[ ] M3-12` | **Sony Creative Looks:** fit ST, PT, NT, VV, VV2, FL, IN, SH, BW, SE with `pv::look_job`. **Needs the owner:** 3–5 RAW + HIF scenes per look, 30–50 frames total, in a local folder. Quality bar: held-out median ΔE ≤ 3 | S | M3-06, M3-07 |
+| `[ ] M3-13` | **Fujifilm-inspired styles** (PRD D16): Provia, Velvia, Astia, Classic Chrome, Classic Neg, Nostalgic Neg, Eterna, Reala Ace, Acros. Gather public RAW + in-camera JPG pairs labelled by the EXIF film mode; at least 5 held-out frames per look. Fit neutral render of the Fuji RAW → JPG, apply to the Sony's neutral render, check by eye on the owner's photos. Hand-tune where needed. Bar missed → labelled approximate, or left out. Rules below | O | M3-06, M3-07 |
+| `[ ] M3-14` | **Leica-inspired styles** (PRD D16): same method and rules. Which looks is decided from the samples found; expect the fewest reliable pairs | O | M3-13 |
+| `[ ] M3-09` | Exit check: edit 20 photos end-to-end, including at least one film look and one camera style; default render vs camera HIF ΔE report | O | all M3 |
+
+**Order:** M3-07 → M3-10 → M3-11 → M3-13 → M3-14. M3-12 runs whenever the owner's frames arrive; it doesn't block the others.
+
+**Rules for public samples (M3-13, M3-14).** The owner approved downloading without a per-source check (2026-11-05), within these limits:
+- Image files only (RAW and JPG), from galleries that publish them as samples. Nothing is executed. Each source goes in its own new folder outside the repo.
+- Terms are read per source; a source that forbids this use is skipped. Every source goes in `docs/M3-look-sources.md` with its terms and what was used.
+- Used locally to fit LUTs, then deletable. Neither the photos nor the fitted brand LUTs are committed; those LUTs live in the app's `luts` folder.
 
 ## 9. M4–M6 and Windows (outline)
 
 - **M4 — AI triage + Import:** ONNX models (CoreML) for sharpness/eyes (reuse RapidRAW face/culling), CLIP intent guess, burst grouping, AI ★ (`pairview:ai*` XMP), human-pass UI, FTP New arrivals + auto-tidy (quiet 30 min), SD import. AI never mutates files (enforced by lifecycle requiring a user-confirmed op token).
 - **M5 — Find + Collections:** smart collections on top of RapidRAW albums, quick collection, filter bar, CLIP semantic search, map (MapLibre), video (AVFoundation), pair-safe batch rename 🛡.
 - **M6 — Style:** regressor training, Auto = my style, named styles, "Why?", batch auto, rebake-before-drop 🛡.
+- **M7 — Film lab (PRD D15):** spike first: build [spektrafilm-rs](https://github.com/turbasvin/spektrafilm-rs), check it matches the reference on our files, and measure a 33 MP render. Then decide vendor vs. separate helper process (GPL-3.0 code can be combined with this AGPL-3.0 fork) and how it fits Done. Adds what LUTs can't: real grain, halation, couplers, paper choice. Baked LUTs stay as the fast path and the fallback.
 - **W — Windows:** after M3. Per the tabling rule (PRD §10.1): WIC/HEVC-extension HIF decode first; HEIF encode tabled (JPG output); video tabled.
 
 ---
@@ -177,6 +190,7 @@ These refine PRD §8 and are binding unless changed here.
 | Upstream changes `file_management.rs` often (4,000+ lines) | A7 hooks, M1-07 | Keep hooks to 1–5 lines that call into `pv`. Merge upstream before starting each milestone |
 | SMB edge cases (case-insensitive names, `._` AppleDouble files, slow `stat`) | M1-03/04/06 | Excludes list, case-folded basenames, timeouts on every NAS call |
 | Data loss bug in lifecycle | M2 | 🛡 review gate, safety suite, local-copy testing before the NAS, Recently Deleted for everything |
+| Fitted looks don't transfer from another brand's RAW to the Sony's | M3-13/14 | Checked by eye on the owner's photos; "approximate" label or left out |
 | Disk space on the Mac (33 GB free) | all | `cargo clean` between milestones; release builds only when packaging |
 
 ## 11. Cost guidance (approximate share of tasks)
