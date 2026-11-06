@@ -366,7 +366,9 @@
         "myCamera": "My Camera",
         "film": "Film",
         "cameraStyle": "Camera styles"
-      }
+      },
+      "filmEffects": "Add film grain + halation",
+      "filmEffectsHint": "Sets the Grain and Halation sliders to values for this stock. You can change them afterwards."
     }
   }
 }

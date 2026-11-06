@@ -9,9 +9,11 @@ import clsx from 'clsx';
 import { Ban, ImageOff, Star } from 'lucide-react';
 import CollapsibleSection from '../../components/ui/CollapsibleSection';
 import Slider from '../../components/ui/Slider';
+import Switch from '../../components/ui/Switch';
 import { useEditorStore } from '../../store/useEditorStore';
 import type { Adjustments } from '../../utils/adjustments';
 import { pvPhotoForPath, usePvPhotoStore } from '../store';
+import { filmEffectsOn, hasFilmEffects, withFilmEffects, withoutFilmEffects } from './filmEffects';
 
 type LookGroup = 'myCamera' | 'film' | 'cameraStyle';
 
@@ -72,6 +74,7 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
   const isReady = useEditorStore((s) => s.selectedImage?.isReady ?? false);
   const lutPath = useEditorStore((s) => s.adjustments.lutPath ?? null);
   const lutIntensity = useEditorStore((s) => s.adjustments.lutIntensity ?? 100);
+  const adjustments = useEditorStore((s) => s.adjustments);
   usePvPhotoStore((s) => s.byPath);
   const photo = imagePath ? pvPhotoForPath(imagePath) : undefined;
 
@@ -80,6 +83,8 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
   const [favourites, setFavourites] = useState(loadFavourites);
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   const previewCache = useRef(new Map<string, Record<string, string | null>>());
+  const looksRef = useRef<Look[]>([]);
+  looksRef.current = looks;
 
   useEffect(() => {
     invoke<Look[]>('pv_looks')
@@ -141,7 +146,9 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
     onHover(null);
     setAdjustments(
       (prev) => ({
-        ...prev,
+        ...(looksRef.current.some((l) => l.path === prev.lutPath && filmEffectsOn(l.name, prev))
+          ? withoutFilmEffects(prev)
+          : prev),
         lutPath: null,
         lutName: null,
         lutData: null,
@@ -155,6 +162,21 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
 
   if (!photo || !imagePath || shown.length === 0) return null;
 
+  const activeLook = looks.find((l) => l.path === lutPath);
+  const effectsOn = !!activeLook && filmEffectsOn(activeLook.name, adjustments);
+
+  /** A new look replaces the last. Grain + halation, if on, follow it, or go with a non-film look. */
+  const selectLook = (look: Look) => {
+    onHover(null);
+    if (look.path === lutPath) return;
+    onSelect(look.path, look.isBuiltIn);
+    if (effectsOn) {
+      setAdjustments((prev) =>
+        hasFilmEffects(look.name) ? withFilmEffects(look.name, prev) : withoutFilmEffects(prev),
+      );
+    }
+  };
+
   const renderLook = (look: Look, keyPrefix: string) => {
     const thumb = previews[look.path];
     const isFavourite = favourites.includes(look.name);
@@ -166,15 +188,12 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
         aria-pressed={look.path === lutPath}
         onMouseEnter={() => onHover(look.path, look.isBuiltIn)}
         onMouseLeave={() => onHover(null)}
-        onClick={() => {
-          onHover(null);
-          if (look.path !== lutPath) onSelect(look.path, look.isBuiltIn);
-        }}
+        onClick={() => selectLook(look)}
         onKeyDown={(e) => {
-          if ((e.key === 'Enter' || e.key === ' ') && look.path !== lutPath) {
+          if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             e.stopPropagation();
-            onSelect(look.path, look.isBuiltIn);
+            selectLook(look);
           }
         }}
         className={clsx(
@@ -207,7 +226,7 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
         >
           <Star size={12} fill={isFavourite ? 'currentColor' : 'none'} />
         </button>
-        <span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 py-0.5 text-left text-[10px] text-white">
+        <span className="absolute inset-x-0 bottom-0 line-clamp-2 bg-black/60 px-1 py-0.5 text-left text-[10px] leading-tight text-white">
           {look.name}
         </span>
       </div>
@@ -240,6 +259,16 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
               }}
               onDragStateChange={onDragStateChange}
               fillOrigin="min"
+            />
+          )}
+          {activeLook && hasFilmEffects(activeLook.name) && (
+            <Switch
+              label={t('pv.looks.filmEffects')}
+              tooltip={t('pv.looks.filmEffectsHint')}
+              checked={effectsOn}
+              onChange={(on: boolean) =>
+                setAdjustments((prev) => (on ? withFilmEffects(activeLook.name, prev) : withoutFilmEffects(prev)))
+              }
             />
           )}
           {favouriteLooks.length > 0 && (
