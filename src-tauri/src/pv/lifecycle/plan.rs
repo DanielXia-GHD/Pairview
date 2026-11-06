@@ -146,6 +146,103 @@ fn is_xmp(m: &Member) -> bool {
     m.name.to_lowercase().ends_with(".xmp")
 }
 
+/// Brings the catalog up to date with sidecars written since the last scan, for the folders of
+/// `photo_ids`: a rating or an edit writes `.xmp`/`.rrdata` straight away, while the catalog hears
+/// of them at the next scan. Call right before a real delete, so "rate, then delete" takes them
+/// along. One folder listing each; offline locations are skipped (the delete is refused anyway).
+pub fn sync_sidecars(cat: &Catalog, photo_ids: &[i64]) -> Result<usize> {
+    let mut folders: Vec<(i64, i64, String)> = Vec::new();
+    {
+        let mut stmt = cat.conn().prepare_cached(
+            "SELECT DISTINCT d.id, d.location_id, d.rel_path
+             FROM photo_members m JOIN files f ON f.id = m.file_id JOIN folders d ON d.id = f.folder_id
+             WHERE m.photo_id = ?1",
+        )?;
+        for &id in photo_ids {
+            for row in stmt.query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))? {
+                let row: (i64, i64, String) = row?;
+                if !folders.contains(&row) {
+                    folders.push(row);
+                }
+            }
+        }
+    }
+    let mounts = crate::pv::locations::mounts();
+    let mut online: BTreeMap<i64, Option<PathBuf>> = BTreeMap::new();
+    let mut added = 0;
+    let mut changed: Vec<i64> = Vec::new();
+    for (folder_id, location_id, rel) in folders {
+        let root = match online.get(&location_id) {
+            Some(root) => root.clone(),
+            None => {
+                let root = crate::pv::locations::get(cat, location_id)?
+                    .filter(|l| crate::pv::locations::status(l, &mounts).is_online())
+                    .map(|l| l.path);
+                online.insert(location_id, root.clone());
+                root
+            }
+        };
+        let Some(root) = root else {
+            continue;
+        };
+        let dir = if rel.is_empty() {
+            root.clone()
+        } else {
+            root.join(&rel)
+        };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let (stem, ext) = crate::pv::scan::l0::split_name(&name);
+            if name.starts_with('.') || crate::pv::scan::l0::file_kind(ext) != Some("sidecar") {
+                continue;
+            }
+            let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+                continue;
+            };
+            if !meta.is_file() {
+                continue;
+            }
+            let inserted = cat.conn().execute(
+                "INSERT OR IGNORE INTO files (folder_id, name, stem_key, ext, kind, size, mtime)
+                 VALUES (?1, ?2, ?3, ?4, 'sidecar', ?5, ?6)",
+                (
+                    folder_id,
+                    &name,
+                    stem.to_lowercase(),
+                    ext.to_ascii_lowercase(),
+                    meta.len() as i64,
+                    super::mtime_ms(&meta),
+                ),
+            )?;
+            if inserted > 0 {
+                added += 1;
+                if !changed.contains(&folder_id) {
+                    changed.push(folder_id);
+                }
+            }
+        }
+    }
+    if !changed.is_empty() {
+        let tx = cat.conn().unchecked_transaction()?;
+        let mut shoots = Vec::new();
+        for folder in changed {
+            if let Some(shoot) = crate::pv::assets::shoot_of(&tx, folder)?
+                && !shoots.contains(&shoot)
+            {
+                shoots.push(shoot);
+            }
+        }
+        for shoot in shoots {
+            crate::pv::assets::rebuild_shoot(&tx, shoot)?;
+        }
+        tx.commit()?;
+    }
+    Ok(added)
+}
+
 /// Plans a delete of `photo_ids`. Photos the scope doesn't apply to are listed in `skipped`.
 pub fn plan_photos(cat: &Catalog, photo_ids: &[i64], scope: Scope) -> Result<Plan> {
     let mut b = Builder::default();
@@ -227,6 +324,8 @@ pub fn plan_paths_with(
             None => b.add_file(location.id, &rel, None, path)?,
         }
     }
+    // These plans are for real deletes (RapidRAW's commands), not previews.
+    sync_sidecars(cat, &by_photo.keys().copied().collect::<Vec<_>>())?;
     for (photo_id, files) in by_photo {
         let how = if whole_photos {
             How::Scope(Scope::Photo)

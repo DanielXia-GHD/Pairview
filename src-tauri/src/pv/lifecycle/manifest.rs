@@ -52,6 +52,10 @@ pub struct Manifest {
     /// The owner's action this operation belongs to (Undo restores whole actions).
     #[serde(default)]
     pub action_id: Option<String>,
+    /// Photo-level XMPs this operation copied next to the file that stayed, `(original, copy)`.
+    /// A restore folds each copy back into its original so a Photo never ends up with two.
+    #[serde(default)]
+    pub xmp_copies: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -100,6 +104,10 @@ impl Manifest {
         );
         for f in &manifest.files {
             safe_rel(&f.path)?;
+        }
+        for (from, to) in &manifest.xmp_copies {
+            safe_rel(from)?;
+            safe_rel(to)?;
         }
         Ok(manifest)
     }

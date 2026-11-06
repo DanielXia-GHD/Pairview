@@ -185,10 +185,12 @@ fn trash(cat: &mut Catalog, op: &OpPlan, action: &str) -> Result<Done> {
         files,
         photos: op.photos.clone(),
         action_id: Some(action.to_string()),
+        xmp_copies: Vec::new(),
     };
 
     // Write-ahead: the op-log row exists before anything on disk changes.
     log_begin(cat, &op_id, op.kind, location.id, &payload)?;
+    let mut copies = Vec::new();
     let result = (|| -> Result<()> {
         fs::create_dir(&op_dir).with_context(|| format!("cannot create {}", op_dir.display()))?;
         manifest.write(&op_dir)?;
@@ -202,6 +204,7 @@ fn trash(cat: &mut Catalog, op: &OpPlan, action: &str) -> Result<Done> {
             let bytes = fs::read(safe_join(&root, from)?)?;
             crate::file_management::write_file_atomic(&target, &bytes)
                 .with_context(|| format!("cannot write {to}"))?;
+            copies.push((from.clone(), to.clone()));
         }
         run_moves(&root, &payload.moves)
     })();
@@ -212,6 +215,7 @@ fn trash(cat: &mut Catalog, op: &OpPlan, action: &str) -> Result<Done> {
 
     manifest.status = Status::Committed;
     manifest.committed_at = Some(now_ms());
+    manifest.xmp_copies = copies;
     if let Err(e) = manifest.write(&op_dir) {
         // The files are safely in Recently Deleted; the op-log says committed.
         log::warn!("Pairview: {op_id} committed but its manifest wasn't updated: {e:#}");
@@ -402,6 +406,12 @@ pub fn restore(
 
     // What's left in the operation folder.
     manifest.files.retain(|f| !restored.contains(&f.path));
+    let xmp_copies = std::mem::take(&mut manifest.xmp_copies);
+    manifest.xmp_copies = xmp_copies
+        .iter()
+        .filter(|(from, _)| !restored.contains(from))
+        .cloned()
+        .collect();
     if manifest.files.is_empty() {
         let _ = fs::remove_file(op_dir.join(manifest::FILE_NAME));
         prune_dirs(&op_dir, &restored);
@@ -414,17 +424,61 @@ pub fn restore(
         }
     }
 
-    if let Err(e) = remember_files(cat, &location, &restored) {
+    let folded = fold_xmp_copies(&root, &xmp_copies, &restored);
+    if let Err(e) = remember_files(cat, &location, &restored, &folded) {
         log::warn!("Pairview: restore of {op_id}: catalog not updated: {e:#}");
     }
     Ok(outcome)
 }
 
-/// Adds restored files back to the catalog, re-pairs their shoots and reads their metadata.
-fn remember_files(cat: &mut Catalog, location: &Location, rels: &[String]) -> Result<()> {
+/// A restored Photo XMP takes back over from the copy made when its folder's file went: the
+/// copy is removed, and if the owner changed it in the meantime (a rating while only the HIF was
+/// there) its text replaces the original's, so the newest rating wins. Only `.xmp` files are
+/// touched. Returns the copies removed. A failure leaves both files, which loses nothing.
+fn fold_xmp_copies(root: &Path, copies: &[(String, String)], restored: &[String]) -> Vec<String> {
+    let mut removed = Vec::new();
+    for (from, to) in copies.iter().filter(|(from, _)| restored.contains(from)) {
+        let fold = || -> Result<bool> {
+            ensure_xmp(from)?;
+            ensure_xmp(to)?;
+            let (original, copy) = (safe_join(root, from)?, safe_join(root, to)?);
+            let Ok(newest) = fs::read(&copy) else {
+                return Ok(false);
+            };
+            if fs::read(&original)? != newest {
+                crate::file_management::write_file_atomic(&original, &newest)?;
+            }
+            fs::remove_file(&copy)?;
+            Ok(true)
+        };
+        match fold() {
+            Ok(true) => removed.push(to.clone()),
+            Ok(false) => {}
+            Err(e) => log::warn!("Pairview: {to} not folded into {from}: {e:#}"),
+        }
+    }
+    removed
+}
+
+/// Adds restored files back to the catalog (and drops `removed` from it), re-pairs their shoots
+/// and reads their metadata.
+fn remember_files(
+    cat: &mut Catalog,
+    location: &Location,
+    rels: &[String],
+    removed: &[String],
+) -> Result<()> {
     let mut shoots = Vec::new();
     {
         let tx = cat.conn_mut().transaction()?;
+        for rel in removed {
+            let (folder, name) = rel.rsplit_once('/').unwrap_or(("", rel));
+            tx.execute(
+                "DELETE FROM files WHERE name = ?1 AND folder_id =
+                     (SELECT id FROM folders WHERE location_id = ?2 AND rel_path = ?3)",
+                (name, location.id, folder),
+            )?;
+        }
         for rel in rels {
             let (folder, name) = rel.rsplit_once('/').unwrap_or(("", rel));
             let (stem, ext) = crate::pv::scan::l0::split_name(name);

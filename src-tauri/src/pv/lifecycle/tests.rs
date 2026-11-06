@@ -630,7 +630,7 @@ fn real_shoot_round_trip() {
     let tmp = tempfile::tempdir().unwrap();
     let root = fs::canonicalize(tmp.path()).unwrap().join("DCIM");
     let shoot = root.join(source.file_name().unwrap());
-    for (rel, _) in snapshot(&source, &|_| true) {
+    for (rel, _) in snapshot(&source, &|rel| !rel.starts_with(TRASH_DIR)) {
         let to = shoot.join(&rel);
         fs::create_dir_all(to.parent().unwrap()).unwrap();
         fs::copy(source.join(&rel), to).unwrap();
@@ -1074,4 +1074,225 @@ fn undo_on_an_offline_location_does_nothing() {
     f.delete(&[f.photo("dsc0001")], Scope::Photo).unwrap();
     f.go_offline();
     assert!(undo_last(&mut f.cat).unwrap().is_none());
+}
+
+// ---- Keep HIF only, then restore: one XMP again ----
+
+#[test]
+fn restoring_a_dropped_raw_folds_the_xmp_copy_back() {
+    let mut f = Fixture::new(SHOOT);
+    let before = f.library();
+    let done = f.delete(&[f.photo("dsc0001")], Scope::KeepDisplay).unwrap();
+    assert!(f.library().contains_key("2026-10-23_1/hif/DSC0001.xmp"));
+    restore(&mut f.cat, f.location, &done.op_id, None).unwrap();
+    // Exactly as before: byte for byte, with no second XMP.
+    assert_eq!(f.library(), before);
+    assert_eq!(f.files_in_catalog(), 7);
+}
+
+#[test]
+fn a_rating_changed_while_the_raw_was_gone_survives_the_restore() {
+    let mut f = Fixture::new(SHOOT);
+    let done = f.delete(&[f.photo("dsc0001")], Scope::KeepDisplay).unwrap();
+    fs::write(f.abs("2026-10-23_1/hif/DSC0001.xmp"), b"newer rating").unwrap();
+    restore(&mut f.cat, f.location, &done.op_id, None).unwrap();
+    let lib = f.library();
+    assert_eq!(lib["2026-10-23_1/arw/DSC0001.xmp"], b"newer rating");
+    assert!(!lib.contains_key("2026-10-23_1/hif/DSC0001.xmp"));
+}
+
+#[test]
+fn undo_of_keep_display_is_byte_identical() {
+    let mut f = Fixture::new(SHOOT);
+    let before = f.library();
+    f.delete(
+        &[f.photo("dsc0001"), f.photo("dsc0002")],
+        Scope::KeepDisplay,
+    )
+    .unwrap();
+    undo_last(&mut f.cat).unwrap().unwrap();
+    assert_eq!(f.library(), before);
+}
+
+/// M2-11, local half, on a temp copy of a real shoot:
+/// `PV_FIXTURES=~/Desktop/2026-10-23_10261023 cargo test --lib pv::lifecycle::tests::exit_check -- --nocapture`
+#[test]
+fn exit_check_rate_slim_undo_on_a_real_shoot() {
+    let Ok(source) = std::env::var("PV_FIXTURES") else {
+        return;
+    };
+    let source = PathBuf::from(source);
+    assert!(
+        !source.starts_with("/Volumes"),
+        "use a local copy, never the NAS"
+    );
+    let tmp = tempfile::tempdir().unwrap();
+    let root = fs::canonicalize(tmp.path()).unwrap().join("DCIM");
+    // Not the fixture's own Recently Deleted: only what's live in it.
+    for (rel, _) in snapshot(&source, &|rel| !rel.starts_with(TRASH_DIR)) {
+        let to = root.join(source.file_name().unwrap()).join(&rel);
+        fs::create_dir_all(to.parent().unwrap()).unwrap();
+        fs::copy(source.join(&rel), to).unwrap();
+    }
+    let cat = Catalog::open_in_memory().unwrap();
+    let location = locations::add(&cat, &root, Some("Copy")).unwrap();
+    let mut f = Fixture {
+        _tmp: tmp,
+        root,
+        cat,
+        location,
+    };
+    f.rescan();
+    let ids: Vec<i64> = {
+        let mut s = f
+            .cat
+            .conn()
+            .prepare("SELECT id FROM photos WHERE state = 'raw_display' ORDER BY stem_key")
+            .unwrap();
+        s.query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    };
+    let shoots: Vec<i64> = {
+        let mut s = f
+            .cat
+            .conn()
+            .prepare("SELECT DISTINCT shoot_folder_id FROM photos")
+            .unwrap();
+        s.query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    };
+    crate::pv::scan::l1::run(&mut f.cat, &shoots).unwrap();
+    assert!(ids.len() >= 2);
+
+    // The owner rates one Photo; that writes its XMP in arw/.
+    let rated = ids[0];
+    let change = crate::pv::metadata::Change {
+        rating: Some(4),
+        ..Default::default()
+    };
+    for (_, r) in crate::pv::metadata::set(&mut f.cat, &[rated], &change).unwrap() {
+        r.unwrap();
+    }
+    let before = f.library();
+
+    // Review, then Apply on every Photo the verdict calls HIF is enough, plus the rated one.
+    let items = crate::pv::slim::review(&mut f.cat, &ids).unwrap();
+    for i in &items {
+        println!(
+            "{} {:?} {:?} {} MB",
+            i.value.photo_id,
+            i.value.verdict,
+            i.value.chips.iter().map(|c| c.kind).collect::<Vec<_>>(),
+            i.raw_bytes / 1_000_000
+        );
+    }
+    plan::sync_sidecars(&f.cat, &ids).unwrap();
+    let plan = plan_photos(&f.cat, &ids, Scope::KeepDisplay).unwrap();
+    let t = std::time::Instant::now();
+    for (_, r) in apply(&mut f.cat, &plan) {
+        r.unwrap();
+    }
+    println!(
+        "dropped {} RAWs, {} MB, in {:.3} s",
+        plan.photos(),
+        plan.bytes() / 1_000_000,
+        t.elapsed().as_secs_f64()
+    );
+    let lib = f.library();
+    assert!(!lib.keys().any(|k| k.to_lowercase().ends_with(".arw")));
+    for (rel, bytes) in &before {
+        if rel.to_lowercase().ends_with(".hif") {
+            assert_eq!(lib.get(rel), Some(bytes), "HIF changed: {rel}");
+        }
+    }
+
+    // Rated, then slimmed straight away: its sidecars went too, and an XMP sits by the HIF.
+    let stem = f
+        .cat
+        .conn()
+        .query_row("SELECT stem_key FROM photos WHERE id = ?1", [rated], |r| {
+            r.get::<_, String>(0)
+        })
+        .unwrap();
+    let in_arw: Vec<_> = lib.keys().filter(|k| k.contains("/arw/")).collect();
+    assert!(in_arw.is_empty(), "left behind: {in_arw:?}");
+    assert!(
+        lib.keys()
+            .any(|k| k.contains("/hif/") && k.to_lowercase().ends_with(&format!("{stem}.xmp"))),
+        "no XMP next to the HIF: {:?}",
+        lib.keys().collect::<Vec<_>>()
+    );
+
+    // The rating survives on the HIF, even for a catalog rebuilt from disk.
+    assert_eq!(crate::pv::metadata::get(&f.cat, rated).unwrap().rating, 4);
+    let cat2 = Catalog::open_in_memory().unwrap();
+    let location2 = locations::add(&cat2, &f.root, Some("Copy")).unwrap();
+    let mut g = Fixture {
+        _tmp: tempfile::tempdir().unwrap(),
+        root: f.root.clone(),
+        cat: cat2,
+        location: location2,
+    };
+    g.rescan();
+    let shoots2: Vec<i64> = {
+        let mut s = g
+            .cat
+            .conn()
+            .prepare("SELECT DISTINCT shoot_folder_id FROM photos")
+            .unwrap();
+        s.query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    };
+    crate::pv::metadata::sync_shoots(&mut g.cat, &shoots2).unwrap();
+    let rebuilt: i64 = g
+        .cat
+        .conn()
+        .query_row("SELECT MAX(rating) FROM metadata", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(rebuilt, 4, "rating lost after a catalog rebuild");
+
+    // Undo puts every byte back.
+    let u = undo_last(&mut f.cat).unwrap().unwrap();
+    println!("undo: {} files", u.files);
+    assert_eq!(f.library(), before);
+    assert_eq!(crate::pv::metadata::get(&f.cat, rated).unwrap().rating, 4);
+}
+
+#[test]
+fn sidecars_written_after_the_last_scan_go_with_the_delete() {
+    let mut f = Fixture::new(&[
+        "s/arw/DSC0001.ARW",
+        "s/hif/DSC0001.HIF",
+        "s/arw/DSC0002.ARW",
+    ]);
+    // A rating saved a moment ago: on disk, not in the catalog yet.
+    fs::write(f.abs("s/arw/DSC0001.xmp"), b"rating").unwrap();
+    fs::write(f.abs("s/arw/DSC0001.ARW.rrdata"), b"{}").unwrap();
+    fs::write(f.abs("s/hif/DSC0001.HIF.rrdata"), b"{}").unwrap();
+    let p = f.photo("dsc0001");
+    assert_eq!(plan::sync_sidecars(&f.cat, &[p]).unwrap(), 3);
+    assert_eq!(f.photo("dsc0001"), p, "same Photo");
+    assert_eq!(plan::sync_sidecars(&f.cat, &[p]).unwrap(), 0);
+    let done = f.delete(&[p], Scope::Photo).unwrap();
+    assert_eq!(done.files, 5);
+    assert_eq!(
+        f.library().keys().collect::<Vec<_>>(),
+        ["s/arw/DSC0002.ARW"]
+    );
+}
+
+#[test]
+fn raw_alone_through_upstream_takes_sidecars_written_since_the_scan() {
+    let mut f = Fixture::new(&["s/arw/DSC0001.ARW", "s/hif/DSC0001.HIF"]);
+    fs::write(f.abs("s/arw/DSC0001.xmp"), b"rating").unwrap();
+    f.delete_paths(&["s/arw/DSC0001.ARW"], false);
+    let lib = f.library();
+    assert_eq!(lib["s/hif/DSC0001.xmp"], b"rating");
+    assert!(!lib.keys().any(|k| k.contains("/arw/")));
 }

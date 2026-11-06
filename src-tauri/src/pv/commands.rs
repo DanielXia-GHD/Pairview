@@ -652,6 +652,7 @@ pub fn pv_delete_photos(
     let ids = lifecycle::plan::photo_ids_for_paths(&cat, &targets)
         .map_err(err)?
         .ok_or_else(|| "some of these aren't Photos in a library location".to_string())?;
+    lifecycle::plan::sync_sidecars(&cat, &ids).map_err(err)?;
     let plan = lifecycle::plan_delete(&cat, &ids, scope).map_err(err)?;
     let result = DeleteResult {
         photos: plan.photos(),
@@ -1049,6 +1050,7 @@ pub fn pv_slim_apply(
     reviewed_shoots: Vec<i64>,
 ) -> Result<SlimResult, String> {
     let mut cat = state.writer().map_err(err)?;
+    lifecycle::plan::sync_sidecars(&cat, &photo_ids).map_err(err)?;
     let plan =
         lifecycle::plan_photos(&cat, &photo_ids, lifecycle::Scope::KeepDisplay).map_err(err)?;
     let result = SlimResult {
