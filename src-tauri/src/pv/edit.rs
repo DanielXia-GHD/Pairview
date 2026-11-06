@@ -14,8 +14,9 @@ use crate::pv::catalog::{Catalog, now_ms};
 use crate::pv::lifecycle::{self, Replaced};
 use crate::pv::{assets, metadata, scan::l1};
 
-/// HEIF quality: what M0 measured as matching the camera's file size.
-const HEIF_QUALITY: f32 = 0.9;
+/// HEIF quality, the owner's choice (2026-11-05). A render from the RAW keeps more fine detail than
+/// the camera's file: at 0.9 it was 23 MB against the camera's 12.5 MB, at 0.8 about 16 MB.
+const HEIF_QUALITY: f32 = 0.8;
 /// PRD §6.4.
 const JPEG_QUALITY: u8 = 92;
 
