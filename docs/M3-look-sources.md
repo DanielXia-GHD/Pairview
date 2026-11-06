@@ -23,11 +23,13 @@ Fuji RAFs carry the camera's own JPEG with the film mode in its EXIF, so one fil
 
 **discuss.pixls.us.** Eight search queries went through `/search`, which its robots.txt disallows, and hit a rate limit, before that was noticed. Everything after that used category listings and topic pages, which are allowed. `scripts/pv-playraw-harvest.py` only uses those.
 
-**Excluded by hand.** Play Raw topic 9571 is from an infrared-converted camera, which no filter would have caught.
+**Excluded by hand.** Play Raw topic 9571 is from an infrared-converted camera, and the two "Analog Scanning Exercise" topics are photos of film negatives. No filter would have caught either.
+
+**Coverage.** All of Play Raw was searched, about 2,100 topics. It holds no more than 2 scenes each of Acros, Eterna, Reala Ace, Classic Neg and Nostalgic Neg.
 
 ## Frames behind the installed looks
 
-64 frames: 24 CC0, 40 from Play Raw. "Training only" frames have mild tone settings, so they help the fit but don't score it.
+71 frames: 24 CC0, 47 from Play Raw. "Training only" frames have mild tone settings, so they help the fit but don't score it.
 
 ### Provia
 
@@ -78,6 +80,10 @@ Fuji RAFs carry the camera's own JPEG with the film mode in its EXIF, so one fil
 | X-T3 | `4s5vNqT54SIT2enZdwZ5eJMS` | yes | [Play Raw 31085](https://discuss.pixls.us/t/31085), hatsnp, CC BY-SA 4.0 |
 | X-T3 | `8WV9WH9Dikiu2hthA1SD1egA` | yes | [Play Raw 32573](https://discuss.pixls.us/t/32573), hatsnp, CC BY-SA 4.0 |
 | X-T3 | `bRN1hIm43svBRPom3FVCU9W6` | training only | [Play Raw 29736](https://discuss.pixls.us/t/29736), hatsnp, CC BY-SA 4.0 |
+| X-T20 | `acYkMZmwry3ixB9kxNVexF3N` | yes | [Play Raw 13619](https://discuss.pixls.us/t/13619), chaimav, CC BY-NC-SA |
+| X-T4 | `e5rLbpIoO9uOsJd6py2Fpsz8` | yes | [Play Raw 60757](https://discuss.pixls.us/t/60757), luator, CC BY-NC-SA 4.0 |
+| X-T20 | `j5MLdBTdC34oZhyinVLuGhGl` | training only | [Play Raw 37215](https://discuss.pixls.us/t/37215), chaimav, CC BY-NC-SA |
+| X-T20 | `oclCEocIjvg23oRFaTX5VljK` | training only | [Play Raw 40721](https://discuss.pixls.us/t/40721), chaimav, CC BY-NC-SA 4.0 |
 
 ### Classic Chrome
 
@@ -92,6 +98,7 @@ Fuji RAFs carry the camera's own JPEG with the film mode in its EXIF, so one fil
 | GFX100S | `Fujifilm-GFX100S-14bits-` | yes | [raw.pixls.us](https://raw.pixls.us/data/Fujifilm/GFX100S/Fujifilm-GFX100S-14bits-compress-4_3.RAF), CC0 |
 | X100VI | `blKUi6njwv0vg6HufbHxqOTB` | yes | [Play Raw 61083](https://discuss.pixls.us/t/61083), Marien_GB, CC BY-NC-SA 4.0 |
 | X100F | `cvk6KNaTxEXeVomgs3Qns0b7` | training only | [Play Raw 25624](https://discuss.pixls.us/t/25624), deanc, CC BY-SA 4.0 |
+| X-T4 | `eb4ER6Sn82XoGDipsdkODyZB` | training only | [Play Raw 44568](https://discuss.pixls.us/t/44568), luator, CC BY-NC-SA 4.0 |
 
 ### Velvia
 
@@ -112,3 +119,5 @@ Fuji RAFs carry the camera's own JPEG with the film mode in its EXIF, so one fil
 | X-Pro1 | `DSCF2131.RAF` | training only | [raw.pixls.us](https://raw.pixls.us/data/Fujifilm/X-Pro1/DSCF2131.RAF), CC0 |
 | X-T30 | `qETEEkyluukbNlp4eonUx500` | training only | [Play Raw 26660](https://discuss.pixls.us/t/26660), Ori, CC BY-SA 4.0 |
 | X-T1 | `kXfi9m7chxdPrOlHdFdMmLjk` | training only | [Play Raw 31677](https://discuss.pixls.us/t/31677), Leniwiec, CC BY-SA 4.0 |
+| GFX100RF | `9ylYUDiEYcu84FwPZuohj9TN` | yes | [Play Raw 57921](https://discuss.pixls.us/t/57921), Peter3, CC BY-SA 4.0 |
+| X-T1 | `cGXoZeBiah1J9FXfyzq5YBRe` | yes | [Play Raw 28682](https://discuss.pixls.us/t/28682), Leniwiec, CC BY-SA 4.0 |
