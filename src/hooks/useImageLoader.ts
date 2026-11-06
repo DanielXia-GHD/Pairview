@@ -6,6 +6,7 @@ import { useLibraryStore } from '../store/useLibraryStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { Invokes } from '../components/ui/AppProperties';
 import { INITIAL_ADJUSTMENTS, normalizeLoadedAdjustments } from '../utils/adjustments';
+import { withBaseLook } from '../pv/edit/baseLook'; // PV
 
 export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
   const selectedImage = useEditorStore((s) => s.selectedImage);
@@ -41,7 +42,7 @@ export function useImageLoader(cachedEditStateRef: React.RefObject<any>) {
           if (metadata.adjustments && !metadata.adjustments.is_null) {
             initialAdjusts = normalizeLoadedAdjustments(metadata.adjustments);
           } else {
-            initialAdjusts = { ...INITIAL_ADJUSTMENTS };
+            initialAdjusts = withBaseLook(selectedImage.path, { ...INITIAL_ADJUSTMENTS }); // PV: My Sony
           }
 
           setEditor({ adjustments: initialAdjusts });

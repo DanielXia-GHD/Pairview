@@ -25,6 +25,7 @@ import {
 import { calculateAutoCropForRotation, calculateCenteredCrop } from '../utils/cropUtils';
 import { CompareMode, Invokes, Option, Panel, SelectedImage } from '../components/ui/AppProperties';
 import { globalImageCache } from '../utils/ImageLRUCache';
+import { keepBaseLook, withBaseLook } from '../pv/edit/baseLook'; // PV
 
 export const debouncedSetHistory = debounce((newAdj: Adjustments, label?: string) => {
   useEditorStore.getState().pushHistory(newAdj, label);
@@ -112,7 +113,7 @@ export const getOriginalAdjustments = (adjustments: Adjustments): Adjustments =>
   ORIGINAL_PRESERVED_KEYS.forEach((key) => {
     (original as any)[key] = adjustments[key];
   });
-  return original;
+  return keepBaseLook(original, adjustments); // PV: "before" keeps the camera look
 };
 
 const getCompareState = (mode: CompareMode, adjustments: Adjustments) =>
@@ -335,7 +336,8 @@ export function useEditorActions() {
           if (libraryActivePath && pathsToReset.includes(libraryActivePath))
             setLibrary({ libraryActiveAdjustments: { ...INITIAL_ADJUSTMENTS } });
           if (selectedImage && pathsToReset.includes(selectedImage.path)) {
-            const resetData = { ...INITIAL_ADJUSTMENTS, aiPatches: [] };
+            // PV: reset goes back to the camera look, not the dark neutral render.
+            const resetData = withBaseLook(selectedImage.path, { ...INITIAL_ADJUSTMENTS, aiPatches: [] });
             resetHistory(resetData);
             setEditor({ adjustments: resetData });
           }

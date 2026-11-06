@@ -1184,3 +1184,33 @@ pub fn pv_edit_revert(
     );
     Ok(reverted)
 }
+
+// ---- Base look (M3-07, M3-08) -----------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BaseLook {
+    pub path: String,
+    pub name: String,
+    pub size: u32,
+}
+
+/// The look RAW Photos start from: `My Sony.cube` in the app's LUT folder, if it has been fitted.
+#[tauri::command]
+pub fn pv_base_look(app: AppHandle) -> Result<Option<BaseLook>, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let name = "My Sony.cube";
+    let path = crate::lut_processing::get_luts_dir(&dir)
+        .map_err(err)?
+        .join(name);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let path = path.to_string_lossy().into_owned();
+    let lut = crate::lut_processing::parse_lut_file(&path).map_err(err)?;
+    Ok(Some(BaseLook {
+        path,
+        name: name.to_string(),
+        size: lut.size,
+    }))
+}

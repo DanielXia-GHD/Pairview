@@ -250,7 +250,7 @@ fn fit_my_sony() {
         data.push((name, samples_of(&n, &c)));
     }
 
-    let is_holdout = |i: usize| i % HOLDOUT_EVERY == 0;
+    let is_holdout = |i: usize| i.is_multiple_of(HOLDOUT_EVERY);
     let train = |skip: &[String]| -> Samples {
         data.iter()
             .enumerate()
@@ -323,6 +323,103 @@ fn fit_my_sony() {
         println!(
             "GPU with look {}: median {m:.2}, p95 {p:.2}",
             pair.file_name().unwrap().to_string_lossy()
+        );
+    }
+}
+
+/// Auto on top of the look: does it land near the camera, or brighten twice?
+/// `PV_LOOK_DIR=… PV_LOOK_AUTO=1 cargo test --lib pv::look_job::auto -- --nocapture`
+#[test]
+fn auto_on_my_sony() {
+    let (Ok(dir), Ok(_)) = (std::env::var("PV_LOOK_DIR"), std::env::var("PV_LOOK_AUTO")) else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    let cube = dir.join("My Sony.cube");
+    let recipe: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("neutral.json")).unwrap()).unwrap();
+    let mut with_look = recipe.clone();
+    with_look["lutPath"] = Value::String(cube.to_string_lossy().into_owned());
+    with_look["lutIntensity"] = Value::from(100);
+    with_look["lutIsSceneReferred"] = Value::Bool(false);
+    let mut pairs: Vec<_> = std::fs::read_dir(dir.join("pairs"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .collect();
+    pairs.sort();
+    let app = tauri::test::mock_app();
+    app.manage(crate::initial_app_state());
+    let r = Renderer {
+        context: gpu(),
+        state: app.state::<AppState>(),
+        settings: settings(),
+    };
+    let luma = |i: &Image16| {
+        let (mut sum, mut n) = (0f64, 0f64);
+        for p in i.pixels() {
+            sum += (0.2126 * p.0[0] as f64 + 0.7152 * p.0[1] as f64 + 0.0722 * p.0[2] as f64)
+                / 65535.0;
+            n += 1.0;
+        }
+        sum / n
+    };
+    println!("pair | camera luma | look luma, dE | auto+look luma, dE | auto settings");
+    for pair in pairs.iter().step_by(HOLDOUT_EVERY) {
+        let raw = pair.join("raw.ARW");
+        let c = image::open(pair.join("camera.png")).unwrap().to_rgb16();
+        let aspect = c.width() as f64 / c.height() as f64;
+        let path = raw.to_string_lossy().to_string();
+        let bytes = crate::file_management::read_file_mapped(&raw).unwrap();
+        let base = crate::image_loader::load_and_composite(
+            &bytes,
+            &path,
+            &recipe,
+            false,
+            &r.settings,
+            None,
+        )
+        .unwrap();
+        let opts = crate::image_processing::resolve_render_options(&r.settings, true);
+        let exposure = crate::image_processing::effective_baseline_exposure(
+            &recipe,
+            crate::as_shot::as_shot(&path),
+            opts.baseline,
+        );
+        let results = crate::image_processing::perform_auto_analysis(&base, exposure);
+        let auto = crate::image_processing::auto_results_to_json(&results, Default::default());
+        let mut both = with_look.clone();
+        for (k, v) in auto.as_object().unwrap() {
+            if k == "activeTools" {
+                if let (Some(to), Some(from)) = (
+                    both.get_mut(k).and_then(Value::as_object_mut),
+                    v.as_object(),
+                ) {
+                    to.extend(from.clone());
+                } else {
+                    both[k] = v.clone();
+                }
+            } else {
+                both[k] = v.clone();
+            }
+        }
+        let look = to_work(&r.render(&raw, &with_look).unwrap(), aspect);
+        // As `calculate_auto_adjustments` does: exposure judged on the look's result.
+        let small = r.render(&raw, &with_look).unwrap().thumbnail(1024, 1024);
+        both["exposure"] = Value::from(look::auto_exposure_with_look(look::mean_luma(&small)));
+        let al = to_work(&r.render(&raw, &both).unwrap(), aspect);
+        println!(
+            "{} | {:.3} | {:.3} {:.2} | {:.3} {:.2} | exp {:.2} con {:.0} hi {:.0} sh {:.0}",
+            pair.file_name().unwrap().to_string_lossy(),
+            luma(&c),
+            luma(&look),
+            look::score(&samples_of(&look, &c), None).0,
+            luma(&al),
+            look::score(&samples_of(&al, &c), None).0,
+            both["exposure"].as_f64().unwrap_or(0.0),
+            auto["contrast"].as_f64().unwrap_or(0.0),
+            auto["highlights"].as_f64().unwrap_or(0.0),
+            auto["shadows"].as_f64().unwrap_or(0.0),
         );
     }
 }

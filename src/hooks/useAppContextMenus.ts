@@ -95,6 +95,7 @@ import {
   removeFromImmichAlbum,
 } from '../components/immich/immichApi';
 import { useImmichStore } from '../components/immich/useImmichStore';
+import { withBaseLook } from '../pv/edit/baseLook'; // PV
 
 export interface UseAppContextMenusProps {
   handleImageSelect: (path: string) => void;
@@ -478,11 +479,13 @@ export function useAppContextMenus(latestProps: UseAppContextMenusProps) {
               icon: Check,
               isDestructive: true,
               onClick: () => {
-                resetHistory({
+                // PV: reset goes back to the camera look, not the dark neutral render.
+                const resetData = withBaseLook(useEditorStore.getState().selectedImage?.path, {
                   ...INITIAL_ADJUSTMENTS,
                   aiPatches: [],
                 });
-                setEditor({ adjustments: { ...INITIAL_ADJUSTMENTS, aiPatches: [] } });
+                resetHistory(resetData);
+                setEditor({ adjustments: resetData });
               },
             },
           ],

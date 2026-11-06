@@ -24,3 +24,15 @@ Through the real GPU path on 3 held-out pairs: 1.11, 0.74, 1.65, matching the CP
 - A single LUT can't reproduce what varies per photo. 1 of 48 training pairs was left out (ΔE > 8): a dusk scene where the camera lifted the whole image much further than usual. Scenes like that will come out darker than the camera's file.
 - Fitted on one camera with its usual settings, and only against sRGB-decoded HIFs. Another camera needs its own fit.
 - It depends on RapidRAW's default tone mapper (`agx`). Changing the default or a large upstream change to the pipeline means fitting again.
+
+## Applying it (M3-07, M3-08)
+
+A RAW Photo with no recipe opens with My Sony on, as an ordinary LUT in the recipe; Reset and "before" in before/after keep it. Saved recipes are never changed. Photos without a RAW don't get it: their file already is the camera's rendering.
+
+**Auto.** RapidRAW's Auto judges the neutral image, which reads dark because the look does the brightening, so it added about +0.7 EV on most photos and brightened twice. With a display-referred look on, exposure is now judged on a small render through the look, and left alone while mean luma stays in 0.33–0.62, the range the camera's own files sit in. The other Auto sliders stay.
+
+| Same 12 held-out pairs | Median ΔE range | Mean luma vs camera |
+|---|---|---|
+| Auto + look, before the fix | 1.6–15.1 | up to 0.17 too bright |
+| Auto + look, after | 0.7–3.3 | within 0.03 |
+| Look alone | 0.6–3.8 | within 0.03 |

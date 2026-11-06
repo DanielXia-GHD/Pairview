@@ -1089,6 +1089,43 @@ fn process_image_for_export_pipeline(
     )
 }
 
+/// PV: the exposure for Auto when a display-referred look is on, judged on a small render through
+/// that look (pv/look.rs). `None` without a look, or if the render fails: Auto as upstream.
+pub(crate) fn auto_exposure_with_look(
+    loaded: &crate::app_state::LoadedImage,
+    js_adjustments: &Value,
+    state: &tauri::State<AppState>,
+    app_handle: &tauri::AppHandle,
+) -> Option<f64> {
+    js_adjustments["lutPath"].as_str()?;
+    if js_adjustments["lutIsSceneReferred"]
+        .as_bool()
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    let context = get_or_init_gpu_context(state, app_handle).ok()?;
+    let small = loaded.image.thumbnail(1024, 1024);
+    let mut adjustments = js_adjustments.clone();
+    // Start from the photo as it would come out with the look alone.
+    adjustments["exposure"] = serde_json::json!(0);
+    let rendered = process_image_for_export_pipeline(
+        &loaded.path,
+        &small,
+        &adjustments,
+        &context,
+        state,
+        loaded.is_raw,
+        "pv_auto",
+        app_handle,
+        RenderOutputPrecision::EightBit,
+    )
+    .ok()?;
+    Some(crate::pv::look::auto_exposure_with_look(
+        crate::pv::look::mean_luma(&rendered),
+    ))
+}
+
 // PV: split so pv tests can render without an AppHandle.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn process_image_with_render_options(

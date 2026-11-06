@@ -16,6 +16,7 @@ import { clearLibrarySelection } from './useLibraryActions';
 import { computeSortedLibrary } from './useSortedLibrary';
 import { getImmichAlbumImages, isImmichAlbumId } from '../components/immich/immichApi';
 import { pvImagesForPath } from '../pv/api'; // PV
+import { withBaseLook } from '../pv/edit/baseLook'; // PV
 import { isPvDatesPath } from '../pv/dates'; // PV
 
 export interface AppNavigationProps {
@@ -280,7 +281,7 @@ export function useAppNavigation({ clearThumbnailQueue, refs }: AppNavigationPro
             if (metadata.adjustments && !metadata.adjustments.is_null) {
               freshAdjustments = normalizeLoadedAdjustments(metadata.adjustments);
             } else {
-              freshAdjustments = { ...INITIAL_ADJUSTMENTS };
+              freshAdjustments = withBaseLook(path, { ...INITIAL_ADJUSTMENTS }); // PV: My Sony
             }
             if (!isSliderDragging && JSON.stringify(cached.adjustments) !== JSON.stringify(freshAdjustments)) {
               setEditor({ adjustments: freshAdjustments });

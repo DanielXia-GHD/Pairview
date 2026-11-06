@@ -4308,8 +4308,18 @@ pub fn calculate_auto_adjustments(
     let exposure =
         effective_baseline_exposure(&js_adjustments, loaded_image.as_shot, render.baseline);
     let results = perform_auto_analysis(&loaded_image.image, exposure);
+    let mut auto = auto_results_to_json(&results, mode.unwrap_or_default());
 
-    Ok(auto_results_to_json(&results, mode.unwrap_or_default()))
+    // PV: with a look on (My Sony), judge exposure on the look's result, or Auto brightens twice.
+    if let Some(ev) = crate::export_processing::auto_exposure_with_look(
+        &loaded_image,
+        &js_adjustments,
+        &state,
+        &app_handle,
+    ) {
+        auto["exposure"] = json!(ev);
+    }
+    Ok(auto)
 }
 
 #[derive(Deserialize, Clone, Copy)]

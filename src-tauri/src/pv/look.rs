@@ -8,7 +8,7 @@
 //! where there are samples, fading back to the curves where there aren't. Saturated colours the
 //! sample never saw therefore get a sensible result, not noise.
 
-// The fitting job (`pv::look_job`) is a gated test for now; nothing in the app calls this yet.
+// The fitting itself runs in the job (`pv::look_job`), a gated test; the app uses the Auto helpers.
 #![allow(dead_code)]
 
 use std::fmt::Write as _;
@@ -154,8 +154,9 @@ fn solve4(mut a: [[f64; 4]; 4], mut b: [f64; 4]) -> Option<[f64; 4]> {
         b.swap(col, pivot);
         for row in col + 1..4 {
             let m = a[row][col] / a[col][col];
-            for k in col..4 {
-                a[row][k] -= m * a[col][k];
+            let (above, below) = a.split_at_mut(row);
+            for (cell, top) in below[0][col..].iter_mut().zip(&above[col][col..]) {
+                *cell -= m * top;
             }
             b[row] -= m * b[col];
         }
@@ -249,10 +250,10 @@ pub fn fit(samples: &[(Rgb, Rgb)]) -> Lut3d {
                                     + node[i] * node[j] * b.w);
                         }
                     }
-                    for ch in 0..3 {
-                        rhs[ch][0] += k * b.y[ch];
+                    for (ch, row) in rhs.iter_mut().enumerate() {
+                        row[0] += k * b.y[ch];
                         for i in 0..3 {
-                            rhs[ch][i + 1] += k * (b.xy[i][ch] - node[i] * b.y[ch]);
+                            row[i + 1] += k * (b.xy[i][ch] - node[i] * b.y[ch]);
                         }
                     }
                 }
@@ -266,8 +267,8 @@ pub fn fit(samples: &[(Rgb, Rgb)]) -> Lut3d {
                     }
                     a[0][0] += 1e-9;
                     let confidence = (weight / (weight + SHRINK_WEIGHT)) as f32;
-                    for ch in 0..3 {
-                        if let Some(x) = solve4(a, rhs[ch]) {
+                    for (ch, row) in rhs.iter().enumerate() {
+                        if let Some(x) = solve4(a, *row) {
                             value[ch] = (prior[ch] + confidence * x[0] as f32).clamp(0.0, 1.0);
                         }
                     }
@@ -277,6 +278,42 @@ pub fn fit(samples: &[(Rgb, Rgb)]) -> Lut3d {
         }
     }
     lut
+}
+
+// ---- Auto with a look -------------------------------------------------------------------------
+
+/// Brightness range (mean sRGB-encoded luma) the camera's own files sit in: across the 12 held-out
+/// pairs it runs from 0.36 to 0.60. Inside it, a photo's exposure is left to the look.
+const COMFORTABLE_LUMA: (f64, f64) = (0.33, 0.62);
+
+fn srgb_to_linear(v: f64) -> f64 {
+    if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// The exposure Auto should set when a look is on, from the mean luma of the rendered result.
+/// RapidRAW's Auto judges the neutral image, which reads dark because a camera-matching look does
+/// the brightening, so on its own it brightens twice (about +0.7 EV on most photos).
+pub fn auto_exposure_with_look(mean_luma: f64) -> f64 {
+    let (low, high) = COMFORTABLE_LUMA;
+    let target = mean_luma.clamp(low, high);
+    (srgb_to_linear(target) / srgb_to_linear(mean_luma.max(0.01)))
+        .log2()
+        .clamp(-2.0, 2.0)
+}
+
+/// Mean sRGB-encoded luma of a rendered image.
+pub fn mean_luma(image: &image::DynamicImage) -> f64 {
+    let rgb = image.to_rgb8();
+    let count = (rgb.width() as u64 * rgb.height() as u64).max(1) as f64;
+    rgb.pixels()
+        .map(|p| 0.2126 * p.0[0] as f64 + 0.7152 * p.0[1] as f64 + 0.0722 * p.0[2] as f64)
+        .sum::<f64>()
+        / 255.0
+        / count
 }
 
 // ---- Quality metric: CIEDE2000 ----------------------------------------------------------------
@@ -409,6 +446,22 @@ mod tests {
                 ]
             })
             .collect()
+    }
+
+    #[test]
+    fn auto_leaves_exposure_alone_in_the_comfortable_range() {
+        for luma in [0.36, 0.41, 0.50, 0.60] {
+            assert_eq!(auto_exposure_with_look(luma), 0.0, "{luma}");
+        }
+        assert!(
+            auto_exposure_with_look(0.15) > 1.0,
+            "a dark photo is lifted"
+        );
+        assert!(
+            auto_exposure_with_look(0.85) < -0.5,
+            "a bright one is lowered"
+        );
+        assert!(auto_exposure_with_look(0.0) <= 2.0, "and never wildly");
     }
 
     #[test]
