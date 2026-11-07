@@ -19,7 +19,7 @@ Pairview is a personal photo library, viewer and editor for macOS (M2), forked f
 | M4 AI triage + Import | First pass built, not yet seen in the app: [M4-triage.md](M4-triage.md) |
 | M5–M7, Windows | Not started |
 
-225 Pairview tests pass. Nothing is packaged yet: the app runs through `tauri dev`.
+226 Pairview tests pass. Nothing is packaged yet: the app runs through `tauri dev`.
 
 ## What works today
 
