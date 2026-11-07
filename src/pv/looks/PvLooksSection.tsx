@@ -14,6 +14,7 @@ import { useEditorStore } from '../../store/useEditorStore';
 import type { Adjustments } from '../../utils/adjustments';
 import { pvPhotoForPath, usePvPhotoStore } from '../store';
 import { filmEffectsOn, hasFilmEffects, withFilmEffects, withoutFilmEffects } from './filmEffects';
+import { isSameLook } from './sameLook';
 
 type LookGroup = 'myCamera' | 'film' | 'cameraStyle';
 
@@ -146,7 +147,7 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
     onHover(null);
     setAdjustments(
       (prev) => ({
-        ...(looksRef.current.some((l) => l.path === prev.lutPath && filmEffectsOn(l.name, prev))
+        ...(looksRef.current.some((l) => isSameLook(l.path, prev.lutPath) && filmEffectsOn(l.name, prev))
           ? withoutFilmEffects(prev)
           : prev),
         lutPath: null,
@@ -162,13 +163,13 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
 
   if (!photo || !imagePath || shown.length === 0) return null;
 
-  const activeLook = looks.find((l) => l.path === lutPath);
+  const activeLook = looks.find((l) => isSameLook(l.path, lutPath));
   const effectsOn = !!activeLook && filmEffectsOn(activeLook.name, adjustments);
 
   /** A new look replaces the last. Grain + halation, if on, follow it, or go with a non-film look. */
   const selectLook = (look: Look) => {
     onHover(null);
-    if (look.path === lutPath) return;
+    if (isSameLook(look.path, lutPath)) return;
     onSelect(look.path, look.isBuiltIn);
     if (effectsOn) {
       setAdjustments((prev) =>
@@ -185,7 +186,7 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
         key={keyPrefix + look.path}
         role="button"
         tabIndex={0}
-        aria-pressed={look.path === lutPath}
+        aria-pressed={isSameLook(look.path, lutPath)}
         onMouseEnter={() => onHover(look.path, look.isBuiltIn)}
         onMouseLeave={() => onHover(null)}
         onClick={() => selectLook(look)}
@@ -198,7 +199,7 @@ export default function PvLooksSection({ setAdjustments, onSelect, onHover, onDr
         }}
         className={clsx(
           'group/look relative aspect-square cursor-pointer overflow-hidden rounded-md border-2 bg-bg-tertiary transition-colors',
-          look.path === lutPath ? 'border-accent' : 'border-transparent hover:border-surface',
+          isSameLook(look.path, lutPath) ? 'border-accent' : 'border-transparent hover:border-surface',
         )}
         data-tooltip={look.name}
       >

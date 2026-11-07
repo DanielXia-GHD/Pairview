@@ -43,6 +43,7 @@ impl PvState {
 
 /// Opens the catalog and starts a watcher per location. Called once from the app's setup.
 pub fn setup(app: &AppHandle) -> Result<()> {
+    crate::pv::looks::remember_look_dirs(app);
     let dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&dir)?;
     let catalog_path = dir.join(catalog::FILE_NAME);

@@ -5,6 +5,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getActiveTools, setToolActive, type Adjustments } from '../../utils/adjustments';
 import { pvPhotoForPath } from '../store';
+import { isSameLook } from '../looks/sameLook';
 
 interface BaseLook {
   path: string;
@@ -45,7 +46,7 @@ export function withBaseLook<T extends Adjustments>(path: string | null | undefi
 
 /** "Before" in before/after: the camera look stays on, only the owner's edits go. */
 export function keepBaseLook<T extends Adjustments>(original: T, current: Adjustments): T {
-  if (!look || current.lutPath !== look.path) return original;
+  if (!look || !isSameLook(current.lutPath, look.path)) return original;
   return {
     ...original,
     lutPath: current.lutPath,

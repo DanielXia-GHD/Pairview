@@ -868,6 +868,94 @@ fn adobe_conversion_leaves_grey_and_widens_green() {
     assert!(out.get_pixel(1, 0).0[0] < 20000);
 }
 
+/// A recipe from another install renders exactly as it should, through the real pipeline, and takes
+/// the LUT from the folder it named. `PV_LOOK_DIR=… PV_LOOK_MOVED=1 cargo test --lib pv::look_job::moved -- --nocapture`
+#[test]
+fn moved_recipes_render_their_own_look() {
+    let (Ok(dir), Ok(_)) = (std::env::var("PV_LOOK_DIR"), std::env::var("PV_LOOK_MOVED")) else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    let recipe: Value =
+        serde_json::from_str(include_str!("../../../scripts/look-neutral.json")).unwrap();
+    let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
+    crate::pv::looks::remember_dirs_for_test(vec![
+        resources.join("pv_film_luts"),
+        resources.join("film_luts"),
+    ]);
+    let pair = std::fs::read_dir(dir.join("pairs"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.join("raw.ARW").exists())
+        .unwrap();
+    let raw = pair.join("raw.ARW");
+    let app = tauri::test::mock_app();
+    app.manage(crate::initial_app_state());
+    let r = Renderer {
+        context: gpu(),
+        state: app.state::<AppState>(),
+        settings: settings(),
+    };
+    let path = raw.to_string_lossy().to_string();
+    let bytes = crate::file_management::read_file_mapped(&raw).unwrap();
+    let base =
+        crate::image_loader::load_and_composite(&bytes, &path, &recipe, false, &r.settings, None)
+            .unwrap();
+    let small = crate::pv::thumbs::shrink(&base, 512);
+    let opts = crate::image_processing::resolve_render_options(&r.settings, true);
+    let render = |cube: &str| {
+        let mut v = recipe.clone();
+        v["lutPath"] = Value::String(cube.to_string());
+        v["lutIntensity"] = Value::from(100);
+        v["lutIsSceneReferred"] = Value::Bool(true);
+        crate::hydrate_adjustments(&r.state, &mut v);
+        crate::export_processing::process_image_with_render_options(
+            &path,
+            &small,
+            &v,
+            &r.context,
+            &r.state,
+            "pv_moved",
+            opts,
+            RenderOutputPrecision::SixteenBit,
+        )
+        .unwrap()
+        .to_rgb16()
+    };
+    let file = "K-Portra 400.cube";
+    let ours = resources.join("pv_film_luts").join(file);
+    let direct = render(&ours.to_string_lossy());
+    let packaged = "/Applications/Pairview.app/Contents/Resources/resources";
+    let moved = render(&format!("{packaged}/pv_film_luts/{file}"));
+    let upstream = render(&format!("{packaged}/film_luts/{file}"));
+    let gone = render(&format!("{packaged}/pv_film_luts/Gone.cube"));
+    let mean_gap = |a: &Image16, b: &Image16| {
+        a.pixels()
+            .zip(b.pixels())
+            .map(|(x, y)| (x.0[1] as f64 - y.0[1] as f64).abs() / 65535.0)
+            .sum::<f64>()
+            / a.pixels().len() as f64
+    };
+    let (same, other, none) = (
+        mean_gap(&direct, &moved),
+        mean_gap(&direct, &upstream),
+        mean_gap(&direct, &gone),
+    );
+    println!(
+        "gap to the look itself: moved {same:.5}, upstream's namesake {other:.4}, missing {none:.4}"
+    );
+    assert!(same < 1e-4, "a moved look renders the same");
+    assert!(
+        other > 0.01,
+        "upstream's same-named LUT is a different look"
+    );
+    assert!(
+        none > 0.01,
+        "a look that exists nowhere still renders as no look"
+    );
+}
+
 /// Auto with a look on, computed the way `export_processing::auto_exposure_with_look` does it:
 /// `PV_LOOK_DIR=… PV_LOOK_AUTO=1 cargo test --lib pv::look_job::auto -- --nocapture`
 #[test]

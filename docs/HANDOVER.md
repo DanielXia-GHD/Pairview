@@ -12,14 +12,15 @@ Paste this:
 
 | Task | What | Blocked on |
 |---|---|---|
+| **Merge to `main`** | Branch `merge/upstream-20261106` holds upstream's 5 commits and the look-path fix. `main` stays behind it until the owner's smoke test (§4.4) | The owner |
 | **M3-13 check** | The owner looks at the four Fujifilm styles on their own photos | The owner. Fits can't be measured on the Sony |
-| **M3-14** | Leica-inspired styles, same method. Leica ships DNG + JPG, so frames need a separate JPG rather than one inside the RAW | Nothing. Expect few reliable pairs, and read each source's robots.txt first |
+| **M3-14** | Leica-inspired styles. Modern Leica DNGs embed a near-full-size camera JPEG, so the method carries over (`scripts/pv-dng-survey.py`, `PV_STYLE_BRAND`, `PV_STYLE_BASE`), but film mode isn't recorded in the samples and the 7 CC0 frames aren't enough. A Play Raw search for DNGs was running (`scratchpad/leica/survey/playraw/` from the M3-13 session). The owner's friend may shoot a Xiaomi RAW + JPEG test | Frames |
 | **M3-15** | Tweak some film looks. The owner said only "some film looks need further tweaking" | The owner listing which and what's off. Ask |
 | **M3-12** | Sony Creative Looks: fit from the owner's frames | The owner shooting 3–5 RAW + HIF scenes for each of ST, PT, NT, VV, VV2, FL, IN, SH, BW, SE |
 | **M3-09** | M3 exit: edit 20 photos including a film look and a camera style | All of M3; the owner |
 | **M2-11** | NAS half: delete, restore, slim on the share | The owner present, NAS mounted |
 
-Then M4. Merge upstream before starting a milestone ([routine](IMPLEMENTATION_PLAN.md), §4.4); `upstream/main` was 5 commits ahead when this was written.
+Then M4. Merge upstream before starting a milestone ([routine](IMPLEMENTATION_PLAN.md), §4.4).
 
 **Rules for public samples** are in the plan under the M3 table. In short: the owner chose download without asking per source, within limits: image files only, each source in its own folder outside the repo, read the terms and skip a source that forbids this use, log every source in `docs/M3-look-sources.md`, and commit neither the photos nor the fitted brand LUTs. Name looks "Fujifilm …" and "Leica …" in the app's `luts` folder, which is what puts them under Camera styles. Quality bar: held-out median ΔE ≤ 3 on at least 5 frames; otherwise label approximate or leave out. Fits come from another camera's RAWs, so the owner also checks them by eye. Sources tried for Fuji, and why most were skipped, are in that log.
 

@@ -27,6 +27,7 @@ import type { ImageFile } from '../../components/ui/AppProperties';
 import { pvApi, type ColorLabel, type KeepRaw, type MetaChange, type PhotoItem } from '../api';
 import { basePath, pvPhotoForPath, usePvPhotoStore, displayVersion } from '../store';
 import { badgeLabel } from '../grid/PvTileBadge';
+import { getDevicePixelRatio } from '../../utils/displayScale';
 import InfoPanel, { loadInfoOpen, saveInfoOpen } from './info';
 import { recursivePaths, shuffled, SLIDESHOW_SECONDS, useSlideshowOptions, type SlideshowOptions } from './slideshow';
 
@@ -470,7 +471,7 @@ function ZoomableImage({ photo, apiRef, onSwipe, fade }: ZoomableImageProps) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const drag = useRef<{ x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null);
   const swipe = useRef({ sum: 0, at: 0, lockedUntil: 0 });
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = getDevicePixelRatio();
 
   const fitScale = useCallback(() => {
     const el = box.current;

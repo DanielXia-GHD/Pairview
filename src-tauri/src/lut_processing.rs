@@ -370,6 +370,10 @@ pub fn parse_lut_file(path_str: &str) -> anyhow::Result<Lut> {
         }
     }
 
+    // PV: a recipe's path may be from before the install moved; refused paths stay refused above.
+    let current_path = crate::pv::looks::current_path(path_str);
+    let path_str = current_path.as_str();
+
     let (extension, bytes): (String, Option<Vec<u8>>) =
         if cfg!(target_os = "android") && is_android_content_uri(path_str) {
             #[cfg(target_os = "android")]

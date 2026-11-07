@@ -9,6 +9,7 @@ import { toast } from 'react-toastify';
 import Slider from './Slider';
 import { useEditorStore } from '../../store/useEditorStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { isSameLook } from '../../pv/looks/sameLook'; // PV
 
 interface LutEntry {
   name: string;
@@ -77,7 +78,8 @@ export default function LUTControl({
               return next;
             });
             previewCache.current.clear();
-            if (entry.path === lutPath) {
+            if (isSameLook(entry.path, lutPath)) {
+              // PV
               onClear();
             }
           } catch (err) {
@@ -198,7 +200,8 @@ export default function LUTControl({
 
   const handleSwatchClick = (entry: LutEntry) => {
     onLutHover?.(null);
-    if (entry.path === lutPath) {
+    if (isSameLook(entry.path, lutPath)) {
+      // PV
       onClear();
     } else {
       onLutSelect(entry.path, entry.isBuiltIn);
@@ -210,7 +213,7 @@ export default function LUTControl({
 
   const renderSwatch = (entry: LutEntry) => {
     const thumb = previews[entry.path];
-    const isSelected = entry.path === lutPath;
+    const isSelected = isSameLook(entry.path, lutPath); // PV
     return (
       <button
         key={entry.path}

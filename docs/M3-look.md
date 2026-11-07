@@ -51,7 +51,9 @@ All 20 Spektrafilm stocks, baked by `scripts/pv-bake-film-looks.py` into `src-ta
 - **Slide films** have no print stage, so they're baked as a direct scan of the film.
 - **Highlights are not pure white:** Portra 400's gray axis tops out near 0.85, its print's maximum in the simulation. That's part of the look; it can be dialled back with intensity.
 
-**Limits.** A LUT can't hold grain, halation or anything local (M3-11, M7). Recipes store a look's absolute path, and a bundled look's path differs between dev and packaged builds; a look that can't be found now renders as no look instead of black, but the recipe would have to be pointed at it again. To sort out before packaging.
+**Limits.** A LUT can't hold grain, halation or anything local (M3-11, M7).
+
+**When the app moves.** Recipes store a look's full path, which differs between dev and packaged builds and between machines. Recipes aren't rewritten for this. A path that still exists is used as it is; one that doesn't is looked up in this install by folder and file name (`pv::looks::current_path`, in `parse_lut_file`, so every loader gets it). The folder counts, because `pv_film_luts` and upstream's `film_luts` hold different LUTs under the same file names. A look that exists nowhere still renders as no look. The panel and upstream's LUT control recognise a moved look the same way (`isSameLook`). Through the real pipeline, a recipe with a packaged-app path renders identically to the look itself, and the same path into `film_luts` differs by a mean of 0.15. Not yet tried in an actual packaged build, since none exists.
 
 # Fujifilm-inspired styles (M3-13)
 

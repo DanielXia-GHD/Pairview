@@ -18,7 +18,7 @@ Pairview is a personal photo library, viewer and editor for macOS (M2), forked f
 | M3 Edit loop + looks | Mostly built. Open: M3-14, M3-15, M3-12, M3-09 |
 | M4–M7, Windows | Not started |
 
-204 Pairview tests pass. Nothing is packaged yet: the app runs through `tauri dev`.
+209 Pairview tests pass. Nothing is packaged yet: the app runs through `tauri dev`.
 
 ## What works today
 
@@ -50,7 +50,7 @@ Pairview is a personal photo library, viewer and editor for macOS (M2), forked f
 | | Revert, editing without a RAW (M3-03) |
 | | Auto with a look (M3-08), grain + halation toggle (M3-11) |
 | | Fujifilm styles on the owner's photos (M3-13) |
-| | Smoke test of upstream merge `47cdc439` |
+| | Smoke test of upstream merges `47cdc439` and `9bf07d70` |
 | | NAS half of M2-11: delete, restore, slim on the share |
 
 The logic behind these has automated tests. What's unchecked is the screens themselves and SMB behaviour.
@@ -72,5 +72,4 @@ The logic behind these has automated tests. What's unchecked is the screens them
 - Grain and halation values are reasoned starting points, not measured.
 - Fujifilm styles are scored on Fuji's own frames. Nothing can measure how close they are on the Sony, so that rests on the owner's eye.
 - The Fujifilm LUTs exist only in the app data folder, like `My Sony.cube`. They aren't committed, by the rules for public samples.
-- Recipes store a look's absolute path, and bundled looks live elsewhere in a packaged build. A missing look now renders as no look rather than black, but this needs solving before packaging.
 - First L0 listing of the whole NAS takes about 150 s. Still to investigate (M1 fix list).
