@@ -51,7 +51,7 @@ CARGO_TARGET_DIR=target/pv cargo test --lib pv::
 CARGO_TARGET_DIR=target/pv cargo clippy --lib --tests
 ```
 
-Sharing `target/debug` with `tauri dev` corrupted the build twice (`symbol(s) not found`; the app stops running). To recover: `cargo clean -p RapidRAW`, build, touch a Rust file. The first build in `target/pv` is slow, about 15 GB. **Before asking the owner to try something, confirm the app actually rebuilt and is running.**
+Sharing `target/debug` with `tauri dev` corrupted the build twice (`symbol(s) not found`; the app stops running). To recover: `cargo clean -p RapidRAW`, then touch a Rust file so `tauri dev` rebuilds (about 95 s). It also happened on 2026-11-06 with every build of mine in `target/pv`, during a merge and a quick run of Rust edits, so `tauri dev` restarting its build repeatedly seems to be enough to cause it. The first build in `target/pv` is slow, about 15 GB. **Before asking the owner to try something, confirm the app actually rebuilt and is running.**
 
 - **Frontend:** `npx tsc --noEmit -p .` must stay at the **64-error upstream baseline**. Then `npx eslint src/pv`, `npx prettier --write src/pv`, `npm run pv:i18n-check`.
 - **Real-file tests:** `PV_FIXTURES=$HOME/Desktop/2026-10-23_10261023 CARGO_TARGET_DIR=target/pv cargo test --lib pv::lifecycle::tests:: -- --nocapture`
