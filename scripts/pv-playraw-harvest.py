@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Finds RAF attachments and licence text in pixls.us Play Raw topics (M3-13).
+"""Finds raw attachments and licence text in pixls.us Play Raw topics (M3-13, M3-14).
 
 Walks the category's listing pages and reads each topic's first post, slowly, using only paths the
 forum's robots.txt allows (not /search). Standard library only.
 
-    python3 -I pv-playraw-harvest.py <out dir> [max topics]
+    python3 -I pv-playraw-harvest.py <out dir> [max topics] [extensions, default raf]
 
 Writes <out dir>/playraw_posts.jsonl. Whether a post's licence allows a use is checked afterwards,
 and by eye for every frame actually used.
@@ -32,7 +32,10 @@ def get(url):
 
 
 def main():
-    out_dir, limit = sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else None
+    out_dir = sys.argv[1]
+    limit = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != 'all' else None
+    wanted = sys.argv[3] if len(sys.argv) > 3 else 'raf'
+    raw_file = re.compile(rf'\.({wanted.replace(",", "|")})(\?|$)', re.I)
     os.makedirs(out_dir, exist_ok=True)
     topics, page = {}, 0
     while limit is None or len(topics) < limit:
@@ -52,7 +55,7 @@ def main():
                 continue
             post = topic['post_stream']['posts'][0]
             links = re.findall(r'href="([^"]+)"', post['cooked'])
-            rafs = [h for h in links if re.search(r'\.raf(\?|$)', h, re.I)]
+            rafs = [h for h in links if raw_file.search(h)]
             if not rafs:
                 continue
             text = html.unescape(re.sub(r'<[^>]+>', ' ', post['cooked']))

@@ -340,8 +340,6 @@ const STYLE_MIN_CORRELATION: f64 = 0.92;
 const STYLE_MIN_SAMPLES: usize = 1_000;
 /// Passes of `Lut3d::smoothed`: removes the stray nodes thin data leaves, at no real cost in score.
 const STYLE_SMOOTHING: usize = 1;
-/// The style whose tone stands in for "the camera's standard rendering" when moving to the Sony.
-const STYLE_BASE: &str = "Provia";
 
 /// The camera's own JPEG inside a RAF: the header gives its offset and length, big-endian.
 fn embedded_jpeg(raf: &[u8]) -> Option<&[u8]> {
@@ -468,11 +466,11 @@ fn aligned(neutral: &Image16, camera: &Image16) -> (Image16, Image16, f64, f64) 
 }
 
 /// The file name is the label in the Looks panel, so a look that missed the bar says so there.
-fn style_name(look: &str, meets_the_bar: bool) -> String {
+fn style_name(brand: &str, look: &str, meets_the_bar: bool) -> String {
     if meets_the_bar {
-        format!("Fujifilm {look}")
+        format!("{brand} {look}")
     } else {
-        format!("Fujifilm {look} (approximate)")
+        format!("{brand} {look} (approximate)")
     }
 }
 
@@ -522,7 +520,7 @@ fn fit_style_from(look_name: &str, train: &[&StyleFrame]) -> Lut3d {
 /// `PV_STYLE_DIR=… [PV_LOOK_DIR=<Sony pairs>] cargo test --lib pv::look_job::fit_camera -- --nocapture`
 ///
 /// `$PV_STYLE_DIR/manifest.tsv`: look, source, frame id, score|train|exclude, url, licence, topic,
-/// model, bytes, colorspace (1 is sRGB), shooter (blank if unknown). Frames are `frames/<source>/<frame id>.RAF`; renders are
+/// model, bytes, colorspace (1 is sRGB), shooter (blank if unknown), orientation (DNG only). Frames are `frames/<source>/<frame id>.RAF`; renders are
 /// cached in `work/`, so fitting again needs no GPU. Cubes land in `cubes/`.
 ///
 /// The manifest holds one frame per scene, so every scored frame can be held out in turn: each is
@@ -535,6 +533,10 @@ fn fit_camera_styles() {
     };
     let dir = Path::new(&dir);
     assert!(!dir.starts_with("/Volumes"), "local copies only");
+    // The name in the panel, and the look whose tone stands in for "the camera's standard
+    // rendering" when moving to the Sony.
+    let brand = std::env::var("PV_STYLE_BRAND").unwrap_or_else(|_| "Fujifilm".into());
+    let base_look = std::env::var("PV_STYLE_BASE").unwrap_or_else(|_| "Provia".into());
     let recipe: Value =
         serde_json::from_str(include_str!("../../../scripts/look-neutral.json")).unwrap();
     let manifest = std::fs::read_to_string(dir.join("manifest.tsv")).unwrap();
@@ -553,14 +555,32 @@ fn fit_camera_styles() {
     println!("look | frame | zoom | correlation | samples");
     for (i, row) in rows.iter().enumerate() {
         let (look, source, id, split) = (row[0], row[1], row[2], row[3]);
-        let raf = dir.join("frames").join(source).join(format!("{id}.RAF"));
+        let folder = dir.join("frames").join(source);
+        let raf = ["RAF", "DNG"]
+            .iter()
+            .map(|ext| folder.join(format!("{id}.{ext}")))
+            .find(|p| p.exists())
+            .unwrap_or_else(|| folder.join(format!("{id}.RAF")));
         let work = dir.join("work").join(id);
         let (np, cp) = (work.join("neutral.png"), work.join("camera.png"));
         if !np.exists() || !cp.exists() {
             let made: Result<(), String> = (|| {
-                let bytes = std::fs::read(&raf).map_err(|e| e.to_string())?;
-                let jpeg = embedded_jpeg(&bytes).ok_or("no embedded JPEG")?;
-                let camera = decode_oriented_jpeg(jpeg)?;
+                // A DNG's JPEG is taken out beforehand (scripts/pv-dng-survey.py), and has no
+                // EXIF of its own, so its orientation comes from the manifest.
+                let extracted = folder.join(format!("{id}.cam.jpg"));
+                let camera = if extracted.exists() {
+                    let mut image = decode_oriented_jpeg(
+                        &std::fs::read(&extracted).map_err(|e| e.to_string())?,
+                    )?;
+                    let exif_value = row.get(11).and_then(|v| v.parse().ok()).unwrap_or(1);
+                    if let Some(o) = image::metadata::Orientation::from_exif(exif_value) {
+                        image.apply_orientation(o);
+                    }
+                    image
+                } else {
+                    let bytes = std::fs::read(&raf).map_err(|e| e.to_string())?;
+                    decode_oriented_jpeg(embedded_jpeg(&bytes).ok_or("no embedded JPEG")?)?
+                };
                 let neutral = renderer.render(&raf, &recipe)?;
                 std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
                 let aspect = camera.width() as f64 / camera.height() as f64;
@@ -680,8 +700,8 @@ fn fit_camera_styles() {
             sony_train.extend(capped(&samples_of(&n, &c)));
         }
     }
-    let Some((_, base, ..)) = fitted.iter().find(|(l, ..)| *l == STYLE_BASE) else {
-        println!("no {STYLE_BASE} fit, so nothing moved to the Sony");
+    let Some((_, base, ..)) = fitted.iter().find(|(l, ..)| *l == base_look) else {
+        println!("no {base_look} fit, so nothing moved to the Sony");
         return;
     };
     let curve = look::input_curve_for_camera(&sony_train, base);
@@ -731,7 +751,7 @@ fn fit_camera_styles() {
             de(lut),
             de(&moved)
         );
-        let name = style_name(look, *passes);
+        let name = style_name(&brand, look, *passes);
         moved
             .write_cube(&dir.join("cubes").join(format!("{name}.cube")), &name)
             .unwrap();
@@ -740,7 +760,7 @@ fn fit_camera_styles() {
     // Do they stay different from each other on the Sony, and is anything broken in them?
     let moved: Vec<(String, Lut3d)> = fitted
         .iter()
-        .map(|(l, lut, _, passes)| (style_name(l, *passes), lut.with_input_curve(&curve)))
+        .map(|(l, lut, _, passes)| (style_name(&brand, l, *passes), lut.with_input_curve(&curve)))
         .collect();
     let test: Samples = sony_test.iter().flat_map(|s| capped(s)).collect();
     let chroma = |c: Rgb| {
