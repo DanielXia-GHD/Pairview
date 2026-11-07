@@ -26,6 +26,7 @@ import { calculateAutoCropForRotation, calculateCenteredCrop } from '../utils/cr
 import { CompareMode, Invokes, Option, Panel, SelectedImage } from '../components/ui/AppProperties';
 import { globalImageCache } from '../utils/ImageLRUCache';
 import { keepBaseLook, withBaseLook } from '../pv/edit/baseLook'; // PV
+import { getDevicePixelRatio } from '../utils/displayScale';
 
 export const debouncedSetHistory = debounce((newAdj: Adjustments, label?: string) => {
   useEditorStore.getState().pushHistory(newAdj, label);
@@ -501,7 +502,7 @@ export function useEditorActions() {
 
   const handleZoomChange = useCallback((zoomValue: number, fitToWindow: boolean = false) => {
     const { originalSize, baseRenderSize, adjustments } = useEditorStore.getState();
-    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const dpr = getDevicePixelRatio();
     let targetZoomPercent: number;
 
     const orientationSteps = adjustments.orientationSteps || 0;
