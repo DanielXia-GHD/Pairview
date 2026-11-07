@@ -7,7 +7,7 @@
 //!   source of truth, so rows can always be rebuilt by a rescan.
 
 /// `MIGRATIONS[i]` upgrades the catalog from version `i` to version `i + 1`.
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4, V5];
 
 /// The schema version this build writes.
 pub const LATEST_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -165,4 +165,22 @@ const V4: &str = r#"
 -- When the owner last finished a slim review of the shoot (M2-09), so Ready to slim stops
 -- listing it. Mirrors `.pairview-shoot.json` like `intent`.
 ALTER TABLE folders ADD COLUMN slim_reviewed_at INTEGER;
+"#;
+
+const V5: &str = r#"
+-- What AI triage measured from a Photo's pixels (M4), per source file version. Suggestions are
+-- derived on request with ratings and flags, so human input counts at once. Rebuildable: nothing
+-- here is the only copy of anything.
+CREATE TABLE triage_signals (
+    photo_id       INTEGER PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+    source_file_id INTEGER NOT NULL,
+    source_mtime   INTEGER NOT NULL,
+    sharpness      REAL    NOT NULL, -- Laplacian variance of the sharpest tiles
+    hash           INTEGER NOT NULL, -- 64-bit difference hash
+    mean_luma      REAL    NOT NULL, -- 0..255
+    contrast       REAL    NOT NULL, -- standard deviation of luma
+    clipped        REAL    NOT NULL, -- share of pixels with a channel at the top (0..1)
+    shadows        REAL    NOT NULL, -- share of pixels near black (0..1)
+    computed_at    INTEGER NOT NULL
+);
 "#;

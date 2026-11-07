@@ -2,7 +2,7 @@
 import { useTranslation } from 'react-i18next';
 import Text from '../../components/ui/Text';
 import { TextVariants, TextWeights } from '../../types/typography';
-import { PV_KEEP_RAW_FILTERS, PV_PHOTO_FILTERS, type PvFilter } from './filter';
+import { PV_AI_FILTERS, PV_KEEP_RAW_FILTERS, PV_PHOTO_FILTERS, type PvFilter } from './filter';
 
 interface SwitchProps {
   options: Array<{ id: string; label: string }>;
@@ -42,6 +42,18 @@ export default function PvFilterSection({ filter, onChange, Switch }: PvFilterSe
             options={PV_KEEP_RAW_FILTERS.map((id) => ({ id, label: t(`pv.grid.filter.keepRaw.${id}`) }))}
             value={filter?.keepRaw ?? 'all'}
             onChange={(keepRaw) => onChange({ ...filter, keepRaw: keepRaw as PvFilter['keepRaw'] })}
+          />
+        </div>
+      </div>
+      <div>
+        <Text as="div" variant={TextVariants.small} weight={TextWeights.semibold} className="px-3 py-1 uppercase">
+          {t('pv.grid.filter.aiTitle')}
+        </Text>
+        <div className="px-3 mt-1">
+          <Switch
+            options={PV_AI_FILTERS.map((id) => ({ id, label: t(`pv.grid.filter.ai.${id}`) }))}
+            value={filter?.ai ?? 'all'}
+            onChange={(ai) => onChange({ ...filter, ai: ai as PvFilter['ai'] })}
           />
         </div>
       </div>

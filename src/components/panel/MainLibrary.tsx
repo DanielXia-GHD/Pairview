@@ -45,6 +45,7 @@ import SettingsPanel from './SettingsPanel';
 import LibraryGrid from './library/LibraryGrid';
 import { JobsMenu, SearchInput, ViewOptionsDropdown } from './library/LibraryHeader';
 import PvShootIntent from '../../pv/grid/PvShootIntent'; // PV: shoot intent
+import PvTriage from '../../pv/grid/PvTriage'; // PV: AI triage button
 import { PV_LATEST_RELEASE_API, PV_LATEST_RELEASE_URL } from '../../pv/branding'; // PV
 
 export interface ColumnWidths {
@@ -584,6 +585,7 @@ export default function MainLibrary(props: MainLibraryProps) {
                   )}
                   {/* PV: shoot intent chip (Casual / Normal / Important) */}
                   <PvShootIntent path={props.currentFolderPath} />
+                  <PvTriage path={props.currentFolderPath} />
                   <div
                     className={`flex items-center gap-2 overflow-hidden transition-all duration-300 whitespace-nowrap ${
                       isBusyDelayed ? 'max-w-xs opacity-100' : 'max-w-0 opacity-0'

@@ -22,5 +22,6 @@ pub mod scan;
 pub mod signals;
 pub mod slim;
 pub mod thumbs;
+pub mod triage;
 pub mod viewer;
 pub mod xmp;

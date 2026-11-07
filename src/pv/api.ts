@@ -235,6 +235,26 @@ export interface Undone {
   locations: number[];
 }
 
+/** AI triage (PRD §6.5 Stage 1): suggestions only, kept apart from the owner's ratings and flags. */
+export type TriageRejectReason = 'misfire' | 'blurry' | 'burstNotBest';
+
+export interface TriageSuggestion {
+  photoId: number;
+  aiStars: number;
+  /** The first frame's Photo id; the same for every frame of a burst. */
+  burst: number | null;
+  burstSize: number;
+  bestOfBurst: boolean;
+  reject: TriageRejectReason | null;
+}
+
+export interface ShootTriage {
+  folderId: number;
+  photos: number;
+  measured: number;
+  suggestions: TriageSuggestion[];
+}
+
 /** Shoot intent (PRD §6.5): moves the Keep RAW / HIF is enough line for the whole shoot. */
 export type ShootIntentValue = 'casual' | 'normal' | 'important';
 
@@ -363,6 +383,10 @@ export const pvApi = {
   undo: () => invoke<Undone | null>('pv_undo'),
   /** Keep RAW / Your call / HIF is enough with reason chips. */
   rawValue: (photoIds: number[]) => invoke<RawValue[]>('pv_raw_value', { photoIds }),
+  /** What earlier triage runs found for a shoot. Reads no image. */
+  triageResults: (folderId: number) => invoke<ShootTriage>('pv_triage_results', { folderId }),
+  /** Measures a shoot's Photos. Reads images and writes only the catalog. */
+  triageRun: (folderId: number) => invoke<ShootTriage>('pv_triage_run', { folderId }),
   /** The intent of the shoot at a folder path; null when the path isn't a shoot. */
   shootIntent: (path: string) => invoke<ShootIntent | null>('pv_shoot_intent', { path }),
   /** Writes `.pairview-shoot.json` in the shoot folder. */

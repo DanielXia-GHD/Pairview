@@ -21,7 +21,7 @@ Paste this:
 | **M3-09** | M3 exit: edit 20 photos including a film look and a camera style | All of M3; the owner |
 | **M2-11** | NAS half: delete, restore, slim on the share | The owner present, NAS mounted |
 
-Then M4. Merge upstream before starting a milestone ([routine](IMPLEMENTATION_PLAN.md), §4.4).
+M4's first pass is built ([M4-triage.md](M4-triage.md)); what's next depends on what the owner makes of it. Merge upstream before starting a milestone ([routine](IMPLEMENTATION_PLAN.md), §4.4). **Morning list for the owner: [MORNING.md](MORNING.md).**
 
 **Rules for public samples** are in the plan under the M3 table. In short: the owner chose download without asking per source, within limits: image files only, each source in its own folder outside the repo, read the terms and skip a source that forbids this use, log every source in `docs/M3-look-sources.md`, and commit neither the photos nor the fitted brand LUTs. Name looks "Fujifilm …" and "Leica …" in the app's `luts` folder, which is what puts them under Camera styles. Quality bar: held-out median ΔE ≤ 3 on at least 5 frames; otherwise label approximate or leave out. Fits come from another camera's RAWs, so the owner also checks them by eye. Sources tried for Fuji, and why most were skipped, are in that log.
 
@@ -96,6 +96,8 @@ The Desktop shoot isn't pristine, because the owner has been testing on it:
 - **RapidRAW's LUT loader rejects any path containing `..`,** and a LUT that fails to load now renders as no look. Don't pass such paths to the job.
 - **`spektrafilm-lut` zeroes exposure compensation in LUT mode** (`digest_params`). The bake script sets it afterwards. Check by reading the LUT's gray axis.
 - **Recipes without a saved look show My Sony only through the frontend default.** A saved recipe keeps its own look, or none.
+- **Rust edits in the main checkout restart `tauri dev`'s build.** For long unattended work, use a worktree under `.claude/worktrees/` with `node_modules` and `libonnxruntime.dylib` symlinked and `CARGO_TARGET_DIR` pointing at the main checkout's `target/pv`, then move `main` once at the end.
+- **Real data before thresholds.** A first blur limit looked fine on synthetic images and would have flagged 1 ordinary photo in 10.
 - **Upstream merges conflict rarely,** and so far only near `// PV:` lines.
 - **Near-black frames flatter a look's score,** and public RAWs lean towards difficult night shots. Keep the brightness gate (`scripts/pv-style-gate.py`).
 - **Holding out a frame isn't enough if its photographer stays in training:** Astia went from 1.18 to 2.26 when they were held out too.

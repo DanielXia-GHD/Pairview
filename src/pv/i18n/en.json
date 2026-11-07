@@ -93,6 +93,13 @@
           "auto": "Auto",
           "keep": "Keep",
           "drop": "Drop"
+        },
+        "aiTitle": "Filter by AI suggestion",
+        "ai": {
+          "all": "All",
+          "rejects": "Rejects",
+          "best": "Best",
+          "bursts": "Bursts"
         }
       }
     },
@@ -369,6 +376,24 @@
       },
       "filmEffects": "Add film grain + halation",
       "filmEffectsHint": "Sets the Grain and Halation sliders to values for this stock. You can change them afterwards."
+    },
+    "triage": {
+      "run": "AI triage",
+      "running": "Starting…",
+      "progress": "Reading {{done}} of {{total}}",
+      "summary": "AI: {{rejects}} to reject · {{bursts}} bursts",
+      "hint": "Suggests bursts, the best of each, and rejects, from sharpness and exposure. Changes no files, ratings or flags.",
+      "unread": "{{count}} photos could not be read. Press to try again.",
+      "tile": {
+        "stars": "AI rating {{count}} of 5, separate from your stars",
+        "best": "Best of a burst of {{count}}",
+        "burst": "In a burst of {{count}}"
+      },
+      "reject": {
+        "misfire": "Suggested reject: looks like a misfire",
+        "blurry": "Suggested reject: much softer than the rest",
+        "burstNotBest": "Suggested reject: not the best of its burst"
+      }
     }
   }
 }

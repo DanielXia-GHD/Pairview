@@ -12,6 +12,7 @@ import {
 } from '../components/ui/AppProperties';
 import { buildImageGroups, GroupBadgeInfo, GroupId } from '../utils/imageGrouping';
 import { pvMatchesFilter } from '../pv/grid/filter'; // PV
+import { usePvTriageStore } from '../pv/grid/triage'; // PV
 
 export const ADVANCED_QUERY_REGEX =
   /^(iso|aperture|f|shutter|s|focal|mm|rating|color|camera|make|model|lens)(?=\s*[:<>=])\s*(?::)?\s*(>=|<=|>|<|=)?\s*(.+)$/i;
@@ -341,13 +342,15 @@ export function useSortedLibrary() {
   const groupingMode: GroupingMode = appSettings?.grouping ?? 'off';
   const groupEditedFiles = appSettings?.groupEditedFiles ?? true;
 
+  // PV: the AI filter reads these, and they arrive after the listing does.
+  const pvTriage = usePvTriageStore((s) => s.byPhoto);
   const displayList = useMemo(() => {
     return computeGroupedLibrary(
       { imageList, imageRatings, filterCriteria, searchCriteria, sortCriteria, exifByPath },
       { appSettings },
       { includeBadges: false },
     ).displayList;
-  }, [imageList, sortCriteria, imageRatings, filterCriteria, searchCriteria, appSettings, exifByPath]);
+  }, [imageList, sortCriteria, imageRatings, filterCriteria, searchCriteria, appSettings, exifByPath, pvTriage]);
 
   const badges = useMemo(
     () => (groupingMode !== 'off' ? buildImageGroups(imageList, groupingMode, groupEditedFiles).badges : null),

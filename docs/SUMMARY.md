@@ -16,9 +16,10 @@ Pairview is a personal photo library, viewer and editor for macOS (M2), forked f
 | M1 Library + viewer | Done |
 | M2 Lifecycle + Keep-RAW | Built. Open: M2-11's NAS half |
 | M3 Edit loop + looks | Mostly built. Open: M3-14, M3-15, M3-12, M3-09 |
-| M4–M7, Windows | Not started |
+| M4 AI triage + Import | First pass built, not yet seen in the app: [M4-triage.md](M4-triage.md) |
+| M5–M7, Windows | Not started |
 
-209 Pairview tests pass. Nothing is packaged yet: the app runs through `tauri dev`.
+225 Pairview tests pass. Nothing is packaged yet: the app runs through `tauri dev`.
 
 ## What works today
 
@@ -34,6 +35,8 @@ Pairview is a personal photo library, viewer and editor for macOS (M2), forked f
 - **Fujifilm-inspired styles:** Provia, Classic Chrome, Astia and Velvia, fitted from public RAFs and held to median ΔE ≤ 3 against the camera's JPEG. Acros, Eterna, Reala Ace, Classic Neg and Nostalgic Neg are left out for lack of public frames. [Details](M3-look.md), [sources](M3-look-sources.md).
 - **Leica-inspired styles:** none. Public files fall short of the bar; a Xiaomi test from a friend of the owner may change that.
 - **Auto** judges exposure on the look's result, so it doesn't brighten twice.
+
+**AI triage (M4, first pass).** The **AI triage** button in the library header suggests bursts, the best of each, rejects and a dimmed AI rating, from sharpness and exposure. It changes no files, ratings or flags. [Details](M4-triage.md).
 
 ## Measured on the real NAS (M1)
 

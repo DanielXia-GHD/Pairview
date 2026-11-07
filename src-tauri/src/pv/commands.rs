@@ -958,6 +958,60 @@ pub fn pv_raw_value(
     .map_err(err)
 }
 
+// ---- AI triage (M4) -----------------------------------------------------------------------
+
+/// How many Photos to measure between progress events and catalog writes.
+const TRIAGE_BATCH: usize = 16;
+
+/// What's known about a shoot from earlier runs. Reads no image, so it's safe to call on opening
+/// a shoot, including on an offline location.
+#[tauri::command]
+pub fn pv_triage_results(
+    state: State<PvState>,
+    folder_id: i64,
+) -> Result<crate::pv::triage::ShootTriage, String> {
+    state
+        .read(|cat| crate::pv::triage::results(cat, folder_id))
+        .map_err(err)
+}
+
+/// Measures a shoot's Photos and returns its suggestions. Reads images only; it writes nothing but
+/// the catalog. The catalog isn't held while reading, which on the NAS is the slow part.
+#[tauri::command]
+pub async fn pv_triage_run(
+    app: AppHandle,
+    folder_id: i64,
+) -> Result<crate::pv::triage::ShootTriage, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<PvState>();
+        let todo = state
+            .read(|cat| {
+                let ids = crate::pv::triage::shoot_photos(cat, folder_id)?;
+                crate::pv::triage::pending(cat, &ids)
+            })
+            .map_err(err)?;
+        let total = todo.len();
+        for (i, batch) in todo.chunks(TRIAGE_BATCH).enumerate() {
+            let _ = app.emit(
+                "pv-triage-progress",
+                serde_json::json!({
+                    "folderId": folder_id,
+                    "done": i * TRIAGE_BATCH,
+                    "total": total,
+                }),
+            );
+            let measured = crate::pv::triage::measure(batch).map_err(err)?;
+            let mut writer = state.writer().map_err(err)?;
+            crate::pv::triage::store(&mut writer, &measured).map_err(err)?;
+        }
+        state
+            .read(|cat| crate::pv::triage::results(cat, folder_id))
+            .map_err(err)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ---- Shoot intent (M2-08) ---------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize)]
