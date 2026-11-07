@@ -67,6 +67,7 @@ The logic behind these has automated tests. What's unchecked is the screens them
 
 ## Known limits
 
+- Seen once, unexplained, on the upstream merge branch: the editor showed a fragment of the photo on black until the app was rebuilt. Possibly a bad build. [Details](HANDOVER.md).
 - A single LUT can't reproduce per-photo processing: scenes the camera lifted hard, such as dusk, come out darker than its file.
 - My Sony is specific to this camera and RapidRAW's default tone mapping.
 - Film look highlights top out near 0.85 rather than pure white. That's part of the simulation, and intensity softens it.
