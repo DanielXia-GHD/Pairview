@@ -32,6 +32,7 @@ Pairview is a personal photo library, viewer and editor for macOS (M2), forked f
 - **My Sony:** fitted from 60 of the owner's ARW + HIF pairs, and the default for a RAW with no recipe. Median colour error against the camera on 12 photos it never saw: 13.13 before, **1.17** after (ΔE2000). [Details](M3-look.md).
 - **20 Spektrafilm film stocks:** baked into LUTs and calibrated to the camera's brightness. With an optional per-stock grain + halation toggle.
 - **Fujifilm-inspired styles:** Provia, Classic Chrome, Astia and Velvia, fitted from public RAFs and held to median ΔE ≤ 3 against the camera's JPEG. Acros, Eterna, Reala Ace, Classic Neg and Nostalgic Neg are left out for lack of public frames. [Details](M3-look.md), [sources](M3-look-sources.md).
+- **Leica-inspired styles:** none. Public files fall short of the bar; a Xiaomi test from a friend of the owner may change that.
 - **Auto** judges exposure on the look's result, so it doesn't brighten twice.
 
 ## Measured on the real NAS (M1)

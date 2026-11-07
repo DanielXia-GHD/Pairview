@@ -27,6 +27,22 @@ Fuji RAFs carry the camera's own JPEG with the film mode in its EXIF, so one fil
 
 **Coverage.** All of Play Raw was searched, about 2,100 topics. It holds no more than 2 scenes each of Acros, Eterna, Reala Ace, Classic Neg and Nostalgic Neg.
 
+**How licences were checked.** At first only short snippets around the licence text were read. After a Leica post turned out to say "NO-AI" next to its licence, the full first post of all 64 Play Raw topics in the Fuji manifest was re-read for AI, training, personal-use or no-derivatives wording. None applied; the one match was about software settings. A manifest entry only records what the search found, so read the whole post for any new frame.
+
+## Leica (M3-14)
+
+No look comes from public files. raw.pixls.us (CC0) has 7 modern Leica DNGs with a near-full-size camera JPEG, and 4 of them have enough usable blocks: CL, M10, Q2, SL2. The bar needs 5.
+
+| Source | Result |
+|---|---|
+| Play Raw, all 2,131 topics | 3 Leica DNGs. Two are Q2 Monochrom, whose sensor has no colour, so they can't teach a colour-to-B&W conversion. The third, a TL2 ([topic 37257](https://discuss.pixls.us/t/37257)), is marked "CC BY-NC-SA 4.0 and NO-AI!", so it was removed, along with its renders and the test LUT fitted with it |
+| Shotkit free RAW roundup | Attribution-only terms, but its download module is broken |
+| Ken Rockwell | All rights reserved |
+| Photography Blog, DPReview, Imaging Resource | Skipped, as for Fuji |
+| Phones | CC0 Huawei and Xiaomi DNGs have no camera JPEG, and the Xiaomi ones predate its Leica models. Play Raw's phone DNGs have no usable preview either. No public RAW + JPEG set with usable terms was found for Xiaomi's Leica models |
+
+Film mode also isn't recorded in these samples: the field is blank on every one. So even a passing look could only be called the cameras' default rendering.
+
 ## Frames behind the installed looks
 
 71 frames: 24 CC0, 47 from Play Raw. "Training only" frames have mild tone settings, so they help the fit but don't score it.

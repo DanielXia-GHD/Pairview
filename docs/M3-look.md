@@ -98,3 +98,13 @@ python3 scripts/pv-style-gate.py <dir>                           # then run the 
 - Astia's frames come from a handful of photographers, on X-T3, X-T20, X-T30 and X-T4 bodies only. Provia and Astia have the largest grey-axis tint, up to 0.026.
 - Some frames are far off and stay in the score: an X-T10 frame at 17.85, where the camera lifted the image far more than usual, and an X-T30 frame at 13.52 with no lift at all, unexplained. The X-T30 frame fell out when frames were reselected at random, and was put back by hand so that it couldn't vanish from the score unnoticed.
 - Fits came from RapidRAW's default tone mapper, so a change there means fitting again.
+
+# Leica-inspired styles (M3-14)
+
+Not fitted from public files: there aren't enough. [Sources](M3-look-sources.md).
+
+The method does carry over. A modern Leica DNG embeds a near-full-size camera JPEG with no EXIF of its own, and `scripts/pv-dng-survey.py` reads and extracts it, so the job takes DNGs (`PV_STYLE_BRAND=Leica PV_STYLE_BASE=Standard`). RapidRAW renders them, and they line up with their JPEGs.
+
+On the 4 CC0 frames with enough usable blocks, the median is 4.08 and the worst frame 7.45, against a bar of 3 on at least 5 frames. Each comes from a different body, so holding one out leaves very little.
+
+**What would change this:** the owner's friend may shoot a Xiaomi test in RAW + JPEG. Those frames would have known modes, but would be Xiaomi's rendition of Leica's looks and should be named so. Per-scene HDR may also stop a single LUT from reaching the bar, which the test will show.
